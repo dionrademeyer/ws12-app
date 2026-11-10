@@ -189,3 +189,201 @@ Starting point is the September prototype (`docs/decisions.md`, Product context)
 - Language is chosen on the Welcome screen, stored on the profile, and can be changed in Settings at any time.
 - Book content (lessons, questionnaires, tips) is stored in both languages per item. If an Afrikaans version of an item is not yet supplied, the app shows the English version with a small "Afrikaans coming soon" note rather than a machine translation.
 - Afrikaans UI strings are reviewed by a first-language Afrikaans reviewer before launch.
+
+---
+
+## Chapter 3. Screen-by-screen UX
+
+Every screen below follows the same template:
+
+- **Purpose:** why it exists.
+- **Shows:** what is on it, top to bottom on mobile.
+- **States:** empty, loading and error behaviour. Loading uses skeleton cards, never a blank screen. Errors say what happened and offer a retry, in plain language.
+- **Next action:** the answer to "What does the learner do next?" Every screen has exactly one primary button.
+
+### 3.0 Screen map
+
+```text
+Welcome > Sign in or Register > Consent (if under 18) > Onboarding (5 steps) > Dashboard
+
+Bottom nav:  Dashboard | Goals | Planner | Progress | AI Tutor
+From cards:  Exam calendar, Lesson Journey > Lesson, Self-assessments > Result,
+             Strategy Library > Tip or Strategy
+Header:      Notifications | Avatar menu > Profile, My Library, Family, Settings, Help, Logout
+Other roles: Parent home (Chapter 13), Admin (Chapter 11), School Portal (Chapter 12, later)
+```
+
+### 3.1 Welcome (S2)
+
+- **Purpose:** first impression; start sign-up or sign-in.
+- **Shows:** WS12 logo, product name in the chosen language, the line "Your Grade 12 journey starts here.", a language switch (English / Afrikaans), buttons "Continue with Google", "Continue with Email", and links "Login" and "Register". A small line under the buttons: "Based on the book by Melvin Monroe Tobias." A "Try the demo" link opens demo mode (S1).
+- **States:** if Google sign-in fails, a message under the button and the email option stays available. Offline: "You're offline. Connect to sign in."
+- **Next action:** Continue with Google.
+
+### 3.2 Sign in and Register (S2)
+
+- **Purpose:** create an account or sign in with the same login used on winstrat12.co.za.
+- **Shows:** Register asks only for email and password (or Google), plus one question: "Are you 18 or older?" (Yes / No). We do not ask for a date of birth at this point. Sign in asks for email and password, with "Forgot password". Both offer "I'm a parent" to switch to the parent sign-up path (Chapter 13).
+- **States:** clear field errors ("That email already has an account. Sign in instead?"); email verification screen with "Resend email" after 60 seconds.
+- **Next action:** Create account, then onboarding (or Consent if under 18).
+
+### 3.3 Parental consent (S2)
+
+- **Purpose:** POPIA requires consent from a parent or guardian before we process a child's personal information beyond what is needed to ask for that consent.
+- **Shows (learner under 18):** "Before we start, a parent or guardian needs to say yes." Two options: "My parent already has a WS12 account" (enter their invite code) or "Send my parent a link" (parent's email or cell number). Explains in one sentence what the parent will see (a weekly summary, not private chats or answers).
+- **Until consent is given (proposed):** the learner can complete onboarding and use the demo-style experience on the device, but nothing beyond the account email, age answer and parent contact is saved to the server, and the AI Tutor is off. When the parent consents, onboarding answers are saved.
+- **Parent side:** a consent page that says who is asking, what is collected, why, and how to withdraw. Buttons "I give consent" and "This is not my child".
+- **States:** "Waiting for your parent" with "Resend" and "Change contact". Sending real messages to real parents needs Didi's approval before go-live.
+- **Next action:** Send my parent a link.
+
+### 3.4 Onboarding, 5 steps (S2)
+
+- **Purpose:** collect only what the app needs to plan for the learner, without overwhelming them. Every step shows "STEP n OF 5" and a progress bar, has Back, and can be finished later from Profile.
+- **Step 1, About you:** first name, grade (12 preselected; 11 allowed for early sign-ups), school (search list, or "My school isn't listed"), province.
+- **Step 2, Subjects and targets:** choose subjects (Life Orientation and a home language suggested), target mark per subject (slider, optional).
+- **Step 3, Exam dates:** trial and final exam dates, prefilled from the WS12 exam calendar for the learner's year with the note "Provisional until the official timetable is published". The learner can adjust them.
+- **Step 4, Study time:** study availability (which days) and preferred study times (morning, afternoon, evening, late).
+- **Step 5, Goals and interests:** one academic goal (suggested goals from targets) and career interests (optional chips). Ends with "Start my journey".
+- **Not asked:** surname, ID number, address, phone, gender, race, home language beyond the app language choice. Surname is optional later in Profile only if needed for certificates.
+- **States:** answers are saved per step, so closing the app does not lose progress. Skipped optional fields lead to friendly empty states later.
+- **Next action:** Next, then "Start my journey" which opens the Dashboard with a first-time welcome.
+
+### 3.5 Dashboard (S3)
+
+- **Purpose:** the learner's home. Answers "What should I do next?" in five seconds.
+- **Shows, in the brief's order:**
+  1. **Header:** logo, notification bell with unread badge, avatar.
+  2. **Exam countdown hero:** navy card with gold number. Shows the next exam first: before trials, "TRIALS: 42 DAYS TO GO", with a smaller line "Finals in 105 days". After trials, finals become the main number. Shows the exam date and "View exam calendar". A short encouraging line from approved copy, for example "You've got this! Stay focused, stay consistent, and make it count." Days are calculated in South African time from the learner's dates, never hard-coded. Includes a slim line "Week 14 of 52" linking to the Lesson Journey (proposed).
+  3. **Today's Study Plan:** up to four tasks, each with subject, activity, time (for example 09:00 to 10:30), checkbox and status. When the week's lesson is not done, it appears as a task "WS12 lesson: MLS 14" (proposed). Ticking a task saves it, updates progress and the streak, and shows short feedback ("Nice. 2 of 4 done today."). "View all" opens the Planner.
+  4. **Streak card (mint):** "5-DAY STREAK!", Monday to Sunday dots that fill in for days with study activity, and a milestone message at 3, 5, 7, 14, 30, 60 and 100 days. The number comes from real activity.
+  5. **This week's lesson (proposed):** title of the unlocked lesson in the learner's language, estimated reading time, "Read this week's lesson" or a tick if done.
+  6. **Tip of the Day (cream):** one tip from the tips table, with "MORE STRATEGIES" to the Strategy Library.
+  7. **Your Next Win:** one recommendation with a reason and one button, for example "Your Mathematics practice has dropped this week." with "START 20-MINUTE MATHS SESSION".
+- **Empty states:** no exam date: "Set your exam date" with a button. No plan: "Let's build your first study plan." with "CREATE STUDY PLAN". No streak: "Your first study session starts today." with "START STUDYING".
+- **States:** each card loads on its own skeleton; one failing card shows a small retry and does not break the page. Demo mode shows a fixed "Demo data" banner.
+- **Next action:** the Your Next Win button. If there is no recommendation yet, the first unticked task.
+
+### 3.6 Exam calendar (S3)
+
+- **Purpose:** see all upcoming exam dates.
+- **Shows:** list of the learner's exams (trials and finals, per subject when the timetable is loaded), with days to go. Dates marked "Provisional" until confirmed by an admin. "Edit my dates" for learner overrides.
+- **Empty:** "Set your exam date" with a button.
+- **Next action:** View exam preparation plan (opens the Planner filtered to the next exam).
+
+### 3.7 Goals (S4)
+
+- **Purpose:** turn ambitions into tracked targets.
+- **Shows:** goal cards grouped by type (academic, subject, study, exam, personal development). Each card: title (for example "Improve Mathematics from 55% to 70%"), current, target, progress percentage, deadline, and an action button ("Continue practice"). Floating "New goal" button.
+- **Create or edit goal:** type, subject (if relevant), title, current value, target value, deadline. Validation stops impossible values (target below current for "improve" goals is allowed only with a warning).
+- **Empty:** "You haven't created a goal yet." with "CREATE MY FIRST GOAL".
+- **Next action:** the action button on the goal closest to its deadline.
+
+### 3.8 Planner (S4)
+
+- **Purpose:** plan and complete study sessions.
+- **Shows:** tabs Today, Week, Month. Today is a time list; Week is seven columns (stacked days on mobile); Month is a calendar with dots per day. Each session: subject, activity, start time, duration, notes, complete toggle. Add, edit, delete (with undo) and mark complete.
+- **Built for AI later:** each session has a `source` (learner, template, ai) so the future Study Planner Agent can propose sessions that the learner accepts or rejects.
+- **Empty:** "Let's build your first study plan." with "CREATE STUDY PLAN" (offers a starter plan built from onboarding study times).
+- **Next action:** Start the next session.
+
+### 3.9 Progress (S5)
+
+- **Purpose:** answer "Where am I? What is improving? What needs attention?"
+- **Shows:** overall progress at the top; subject bars (for example "Mathematics 72%") where the percentage comes from the learner's own logged marks and completed work; study hours this week; tasks completed; current and longest streak; weekly and monthly activity charts; goal completion; Lesson Journey progress ("14 of 52 lessons"); latest self-assessment dates. Each block has an action ("Physics needs attention" with "Practice Physics").
+- **Charts:** simple bar charts from real state, lazy-loaded, with a text summary for screen readers.
+- **Empty:** "Your progress shows up after your first study session." with "START STUDYING".
+- **Next action:** the action on the weakest subject.
+
+### 3.10 AI Tutor (S6)
+
+- **Purpose:** a supportive study assistant that answers from approved WS12 content.
+- **Shows:** greeting with the learner's first name ("Hi Thabo, what are we working on today?"), suggested actions: Explain a concept, Help me study, Give me a quiz, Explain my mistake, Create a study plan. Chat thread, input box, and a small line: "WS12 Tutor uses the WS12 book. Check with your teacher if you're unsure." Answers that use book content show their source ("From MLS 14").
+- **When content does not cover a question:** "I don't have WS12 content on that yet. Your teacher is the best person to ask." It never invents lessons, quotes or statistics.
+- **States:** typing indicator, timeout with retry, daily usage limit message (proposed, to control cost), offline: "The Tutor needs a connection."
+- **Locked for under-18 learners until parental consent** is given.
+- **Next action:** tap a suggested action.
+
+### 3.11 Lesson Journey (S3 card, full screen proposed for S4 or S5)
+
+- **Purpose:** the 52-week journey through the book, one lesson a week. A key differentiator.
+- **Shows:** a vertical path of 52 lessons (MLS 1 to 52) grouped by school term. Each item: number, title in the learner's language, state (done, unlocked, locked with unlock date). Progress "14 of 52" and the countdown to trials and finals at the top. Locked lessons show "Unlocks on Monday 12 April" style text and cannot be opened.
+- **Unlock rule (proposed):** lessons follow the Grade 12 calendar. On sign-up, all lessons up to the current week are unlocked so late joiners can catch up; then one new lesson unlocks every Monday. Learners who sign up before the school year (Class of 2027 from November 2026) see a pre-season view with MLS 1 as a preview (Chapter 15).
+- **Empty or pre-season:** "Your journey starts in January. Here's a taste of week 1." with "READ THE PREVIEW".
+- **Next action:** Read this week's lesson (or the oldest unread unlocked lesson).
+
+### 3.12 Lesson (S4 or S5, proposed)
+
+- **Purpose:** read and act on one weekly lesson.
+- **Shows:** lesson number and title, reading time, the lesson text from the book, then the lesson's activity (for example a reflection question or a short exercise), an optional short quiz, and "Mark lesson complete". Text-first and light on data; optional audio or video only on tap. Language switch per lesson if both versions exist.
+- **Content:** to be supplied from the book. Nothing is written by agents.
+- **States:** offline reading for the current week's lesson once cached. Saved reflection answers are private to the learner.
+- **Next action:** Mark lesson complete, then "Add a study task from this lesson" or back to the Dashboard.
+
+### 3.13 Self-assessments (S5, proposed)
+
+- **Purpose:** the book's five profiling questionnaires online, with saved results that can be retaken. A key differentiator.
+- **Shows:** list of the five questionnaires (names to be supplied from the book), each with time to complete, last taken date and "Take" or "Retake". Questionnaire screen: one question per screen on mobile, progress bar, answer options, Back. Result screen: the result as the book defines it, what it means, and one suggested next step linked to a lesson or goal. History: previous results by date, with a simple comparison where the book's scoring allows it.
+- **Related core IP:** the DCA formula, the DNA of a Successful Matriculant and Force Field Analysis may appear as guided worksheets here or inside lessons (Chapter 8). Their content is to be supplied from the book.
+- **Privacy:** answers and results are private to the learner. Parents and teachers see only that a self-assessment was completed, unless the learner chooses to share a result.
+- **Empty:** "Get to know yourself as a learner. It takes about 10 minutes." with "TAKE MY FIRST SELF-ASSESSMENT" (time to be confirmed from the book).
+- **Next action:** Take or retake the next questionnaire.
+
+### 3.14 Strategy Library (S3)
+
+- **Purpose:** browse WS12 strategies and tips beyond Tip of the Day.
+- **Shows:** search, filters (topic, lesson), tip cards, links into the Lesson Journey and Self-assessments. Content comes from the content and tips tables; only approved items appear.
+- **Empty:** "New strategies are on the way." (only if no approved content exists).
+- **Next action:** open a strategy, then "Add to today's plan".
+
+### 3.15 Notifications centre (S3)
+
+- **Purpose:** one place for reminders and announcements.
+- **Shows:** list grouped by Today and Earlier. Types: study reminder, goal reminder, streak reminder, new strategy, exam countdown, achievement, important announcement, plus "new lesson unlocked" and parent link requests. Unread items are bold; opening marks read; "Mark all as read". Each notification links to its action.
+- **Limits:** at most one reminder push per day by default; quiet hours from 21:30 to 06:00 (proposed); every type can be turned off in Settings. No guilt-based copy.
+- **Empty:** "You're all caught up."
+- **Next action:** tap the newest unread notification.
+
+### 3.16 Profile (S2)
+
+- **Purpose:** see and edit learner information.
+- **Shows:** name, school, grade, subjects, target marks, current streak, goals summary, achievements, exam dates, linked parents, and "Edit". "Settings" link.
+- **Next action:** Edit profile (or "Add your exam date" if missing).
+
+### 3.17 My Library (S2)
+
+- **Purpose:** re-download purchased books in both languages and bonus files by tier.
+- **Shows:** "My books" with English and Afrikaans editions the person owns, each with file size and "Download"; "Bonus files" for their tier; free planners for every free account. Locked items show which tier includes them and "Upgrade".
+- **How it works:** files sit in private Supabase storage. Tapping Download calls an edge function that checks the entitlement and returns a short-lived signed link.
+- **Empty (free account):** "Your free planners are ready." with "DOWNLOAD PLANNER" and a soft "See the full book" link.
+- **Next action:** Download.
+
+### 3.18 Family (parent linking) (S2)
+
+- **Purpose:** link learner and parent accounts both ways.
+- **Learner view:** linked parents, "Add a parent" (send link by email or cell number, or enter the parent's invite code), "Remove". Plain-language list of what parents can see.
+- **Parent view:** linked children, "Invite my child" (shows an invite code and share link for WhatsApp), pending invites, "Remove".
+- **Rules:** a link becomes active only when both sides have accepted. Either side can remove it at any time.
+- **Next action:** Add a parent (learner) or Invite my child (parent).
+
+### 3.19 Settings (S2)
+
+- **Shows:** language, notification types and quiet hours, study reminder time, data saver, exam dates, privacy (download my data, delete my account request, parent links), Log out.
+- **Next action:** none required; "Done" returns to the previous screen.
+
+### 3.20 Help (S2)
+
+- **Shows:** short FAQs (account, payments, My Library, parent linking, privacy), "Contact support" (email link), and a "Need someone to talk to?" section with verified South African support lines (to be supplied and checked by Didi).
+- **Next action:** Contact support.
+
+### 3.21 Logout
+
+- From the avatar menu or Settings. Confirms "Log out of WS12?", clears the session on the device, returns to Welcome. Queued offline changes are synced first, or the learner is warned if they cannot be.
+
+### 3.22 Achievements (S3, inside Profile)
+
+- **Shows:** earned milestones (streaks at 3, 5, 7, 14, 30, 60, 100 days; first goal; lessons completed; first self-assessment) and the next one to earn. Celebrations are short and skippable. No rewards that look like gambling.
+- **Next action:** the action that earns the next achievement.
+
+### 3.23 Demo mode (S1)
+
+- Seed learner Thabo Mokoena, Grade 12, subjects Mathematics, Physical Sciences, English Home Language, Life Orientation. A fixed "Demo data" banner on every screen, and nothing is written to real learner tables. "Create my own account" is always visible.
