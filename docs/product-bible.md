@@ -605,3 +605,130 @@ All tables live in the one Supabase Postgres database, in the `public` schema un
 - Parental consent recorded before processing a minor's data beyond the consent request.
 - "Download my data" and "Delete my account" in Settings. Deletion removes learner rows and anonymises analytics events.
 - Proposed retention: AI chat messages 90 days, analytics events 24 months, payment records as required by law. To be confirmed by Didi (Chapter 15).
+
+---
+
+## Chapter 7. AI agent architecture
+
+### 7.1 Principles
+
+- AI is an assistant to learners, parents, teachers and the WS12 team. It never replaces a teacher, mentor, parent or human leadership, and the UI never says it does.
+- The AI never invents educational content, quotes, statistics or testimonials, and never presents Melvin's human-written book as AI-generated.
+- No model API keys in the browser. Every model call goes through a Supabase edge function.
+- Start small: version 1 builds only the AI Tutor and the rule-based Your Next Win. The architecture lets more agents be added without rewriting the app.
+
+### 7.2 Orchestration layer
+
+```text
+App (src/ai/)  --->  Edge function: ai-gateway
+                         |
+                         +-- Auth check, consent check, rate limit
+                         +-- Agent registry: picks the agent module
+                         |      tutor (v1)
+                         |      study-planner, motivation, exam-prep,
+                         |      parent-support, teacher-support (later)
+                         +-- Tools the agent is allowed to use
+                         |      retrieve_ws12_content (kb_chunks)
+                         |      read_learner_summary (no names beyond first name)
+                         |      propose_study_sessions (later; learner must accept)
+                         +-- Model provider adapter (provider to be chosen by Didi)
+                         +-- Output checks, logging to ai_messages
+```
+
+Each agent module declares:
+
+| Field          | Meaning                                                                  |
+| -------------- | ------------------------------------------------------------------------ |
+| `id`           | For example `tutor`                                                      |
+| `purpose`      | One sentence                                                             |
+| `inputs`       | Typed input (question, learner summary, language)                        |
+| `allowedTools` | Exact list of tools; anything else is refused                            |
+| `outputSchema` | Typed output (answer text, source ids, suggested action)                 |
+| `guardrails`   | Rules checked before and after the model call                            |
+
+Adding an agent means adding a module and registering it. The app talks to `ai-gateway` with an agent id, so screens do not change.
+
+### 7.3 Your Next Win (rule-based, S3, v2 in S5)
+
+Not a language model. A pure TypeScript function in `src/domain/` (mirrored in the database where needed) that takes the learner's goals, study activity, task completion, subject marks, upcoming exams, weak areas and lesson progress, and returns ONE action with a reason. Rules are ordered and fully explainable. Proposed starting rules, first match wins:
+
+1. No exam date: "Set your exam date" (so the countdown works).
+2. No plan for today: "Plan today's study" (starter plan from onboarding times).
+3. This week's lesson not done and it is Thursday or later: "Read this week's lesson".
+4. A subject with marks well below target and no practice in 7 days: "Start a 20-minute [subject] session".
+5. A goal deadline within 14 days and progress behind schedule: "Continue [goal]".
+6. Streak at risk (active yesterday, nothing today, after 17:00): "Complete one task to keep your streak".
+7. Exam within 30 days: "View your exam preparation plan".
+8. Default: the first unticked task today.
+
+Thresholds are set in one config file and tuned with the `recommendations` log. Unit tests cover each rule with realistic cases.
+
+### 7.4 AI Tutor (S6)
+
+- **Flow:** learner asks; the gateway checks consent and limits; retrieves the most relevant approved chunks in the learner's language; if no chunk passes the relevance threshold, the Tutor replies with the "I don't have WS12 content on that yet" message and suggests asking a teacher; otherwise it answers using only those chunks and returns their source ids, shown as "From MLS 14".
+- **Suggested actions:** Explain a concept, Help me study, Give me a quiz (questions only from approved quiz content or generated strictly from retrieved text and labelled as practice), Explain my mistake, Create a study plan (proposes sessions the learner accepts in the Planner).
+- **Guardrails:**
+  - Answers only from retrieved approved content; no outside facts presented as WS12 content.
+  - Never claims to be Melvin, a teacher or a counsellor.
+  - Does not ask for or store personal details. Only the first name and grade go to the model.
+  - If a message suggests distress or risk of harm, the Tutor stops tutoring, responds with care, encourages talking to a trusted adult, and shows verified South African support lines (to be supplied and checked by Didi). The message is flagged for review.
+  - Refuses to write assignments for the learner to hand in; offers to explain instead.
+  - Daily message limit per learner (proposed) to control cost.
+- **Logging:** `ai_messages` stores the text, source chunk ids and flags for quality review, with a retention limit (proposed 90 days). No analytics event contains message text.
+- **Model choice:** provider and model are not decided. The adapter keeps the choice in one place (Chapter 15).
+
+### 7.5 Future agents (architecture only)
+
+From the brief: Executive Intelligence, Study Planner, AI Tutor, Curriculum, Learner Success, Motivation, Exam Preparation, Parent Support, Teacher Support, Marketing Intelligence. None is built in version 1 except the Tutor. Agents that act on learner data (Study Planner) only propose; the learner accepts. Agents that face parents or teachers only use summary data under the same RLS rules as the portals.
+
+---
+
+## Chapter 8. Melvin's content to AI knowledge architecture
+
+### 8.1 The rule
+
+The book is 100% human-written by a South African educator. WS12 turns it into structured content; it does not rewrite it, summarise it into new claims, or add invented lessons. Every item that reaches learners, and every chunk the AI can retrieve, has been approved. Nothing is published as Melvin's without Didi's approval.
+
+### 8.2 The content hierarchy
+
+From `docs/build-plan.md`: Book, Chapters, Strategies, Topics, Lessons, Activities, Quizzes, AI explanations, Study plans. Mapped to the `content` tree (Chapter 6):
+
+| Level           | WS12 meaning                                                                 | Stored as |
+| --------------- | ---------------------------------------------------------------------------- | --------- |
+| Book            | "Winning Strategies for Grade 12" / "Wenner Strategieë vir Graad 12"         | Root `content` row |
+| Chapters        | Sections or terms of the book, as the book defines them (to be supplied from the book) | `kind = chapter` |
+| Strategies      | Named strategies and frameworks: the DCA formula, the DNA of a Successful Matriculant, Force Field Analysis | `kind = strategy` or `framework` |
+| Topics          | Themes that cut across lessons (for example motivation, time, mindset), tagged from the book | `kind = topic` and tags |
+| Lessons         | MLS 1 to 52, one per week                                                    | `kind = lesson` plus `lessons` row |
+| Activities      | Exercises, reflections and worksheets in the book                            | `kind = activity` |
+| Quizzes         | Questions from the book, or approved practice questions                       | `kind = quiz` |
+| AI explanations | Short explanations the Tutor may give, written or approved by the WS12 team, linked to their source lesson | `kind = explanation`, status approved |
+| Study plans     | Plan templates based on the book's guidance                                    | Planner templates |
+
+Stories such as the Pencil story are stored as `kind = story` and linked to the lessons that use them.
+
+### 8.3 What each type of book content becomes
+
+- **Weekly lesson (MLS 1 to 52):** number, week, English and Afrikaans title and text, reading time, linked activity, optional quiz, linked strategies and stories, unlock week, minimum tier. Known titles include Momentum; Lessons from a Salmon (Lesse van 'n Salm); The Comfort Zone (Gemaksone); Entropy (Entropie); The Marshmallow Experiment (Marshmallow Eksperiment); Pressing the Self-Destruct Button; The Wait Is Almost Over (Die Wag Is Byna Verby); A Good Start to Project Matric. Their numbers, text and order are to be supplied from the book.
+- **Framework (DCA formula, DNA of a Successful Matriculant, Force Field Analysis):** a `framework` item with its explanation from the book, plus an optional guided worksheet (an activity with fields the learner fills in and saves privately). What each framework contains is to be supplied from the book.
+- **Story (the Pencil story):** a `story` item linked to its lessons. Text to be supplied from the book.
+- **Profiling questionnaire (five):** a `questionnaire` with items, answer scale, scoring rule and result bands with meanings and a next step, all taken from the book. Learners take it online; each attempt is saved in `assessment_attempts` so they can retake it and compare. Names, items, scoring and bands are to be supplied from the book.
+- **Saved results:** private to the learner, used by Your Next Win only where the book links a result to a lesson or action.
+
+### 8.4 The content pipeline
+
+1. **Source:** Didi supplies the manuscript in an editable format (Word or similar), in English and Afrikaans, plus the five questionnaires with their scoring.
+2. **Structure:** the WS12 team (with agent help for formatting only) splits the manuscript into one Markdown file per item with a small header (type, MLS number, week, language, title, links). The text is copied, not rewritten.
+3. **Check:** a script compares the structured text with the manuscript to confirm nothing was changed or lost.
+4. **Review:** Didi (and Melvin where Didi decides) reviews each item in the admin content queue and approves it. Status moves draft, in review, approved.
+5. **Publish:** approved items become visible to learners according to their unlock week and tier.
+6. **Index:** only approved items are split into chunks, embedded and stored in `kb_chunks` with their content version. Retiring or changing an item removes or replaces its chunks.
+7. **Version:** every edit creates a new version; saved assessment results keep the version they were taken on.
+
+### 8.5 First controlled content (S6)
+
+A small set of lessons chosen and approved by Didi goes into the knowledge base first. The Tutor is tested against them, including questions outside those lessons that must get the "I don't know" reply.
+
+### 8.6 Later sources
+
+Curriculum-aligned content, past papers and other approved study resources can be added as new `content` kinds with their own source labels, so the Tutor always says where an answer came from. Each source needs Didi's approval and must be properly licensed.
