@@ -132,10 +132,13 @@ Decision: website accounts and the app share ONE Supabase login (`docs/decisions
 
 - **One identity.** Both winstrat12.co.za and app.winstrat12.co.za use the same Supabase project and the same `auth.users` table. A person has one account, one password or Google identity, and one profile.
 - **Website side.** The plain HTML site loads `supabase-js` from a pinned script and uses the publishable key for sign-up, sign-in and "Forgot password". The website only handles: free account sign-up (lead capture), sign-in, checkout hand-off, and a "Go to My Library" link. All logged-in features live in the app, so they are built once.
+- **Website sign-up and age.** The website sign-up form asks "Are you 18 or older?" before anything else. Adults (mostly parents) create their free account on the website. Anyone under 18 is sent to the app's Register screen (app.winstrat12.co.za/register), where the consent flow in 3.3 runs. The website never stores a minor's email or adds it to a marketing list. Marketing emails go only to adults who opted in.
+- **Google profile data.** Supabase Auth keeps the Google name and picture in its own user metadata. The sign-up trigger never copies them into `profiles`. For a learner waiting for consent, the consent edge function clears the name and picture from the auth metadata at sign-up, so only the email is held until a parent consents.
+- **Checkout is server-side.** The plain HTML site holds no payment secrets. Its "Buy" buttons call a `create-checkout` edge function with the product code. That function creates the Stripe Checkout Session, or builds and signs the PayFast payment request with the PayFast passphrase, and returns the redirect. Prices come from the `products` table, never from the page.
 - **App side.** The app handles everything after sign-in.
 - **Session between the two sites.** By default Supabase stores the session per origin, so a person signed in on the website is not automatically signed in on the app subdomain. Proposed for v1: the website's "Open the app" and "My Library" links go to the app, which asks the person to sign in with the same account (one tap with Google). Later option: a shared cookie on `.winstrat12.co.za` so one sign-in covers both. This needs a small custom storage adapter and Gary's help on the website side.
 - **Configuration.** Both origins are listed as allowed redirect URLs in Supabase Auth and as authorised origins on the Google OAuth client.
-- **Purchases before an account exists.** If a parent pays on the website before creating an account, the payment webhook stores the entitlement against the verified buyer email. When an account with that email is created or signs in, the entitlement is claimed automatically.
+- **Purchases before an account exists.** If a parent pays on the website before creating an account, the payment webhook stores the entitlement against the verified buyer email. When an account with that email signs in, a `claim_entitlements()` function claims it, but only if Supabase Auth has verified that email (a confirmed email sign-up, or a Google account with a verified email). An unverified account never claims a purchase.
 - **Apple sign-in later.** Auth code keeps providers in one list so Apple can be added without changing screens.
 
 ### 2.4 Roles
@@ -147,14 +150,14 @@ Decision: website accounts and the app share ONE Supabase login (`docs/decisions
 | teacher | Teacher at a school (later, S7+) | Class-level summaries for learners who joined their class      |
 | admin   | Didi and the WS12 team           | Admin dashboard; content, exam dates, tips, support            |
 
-A person can hold more than one role (for example a teacher who is also a parent). Roles live in a `user_roles` table that only admins can change; they are never taken from client input.
+A person can hold more than one role (for example a teacher who is also a parent). Roles live in a `user_roles` table. Every new account gets the learner role from the sign-up trigger. The parent role is self-service but narrow: "I'm a parent" calls a `claim_parent_role()` security definer function that can add only the parent role to the caller's own account (and is refused for an account waiting for parental consent). Teacher and admin roles are granted only by admins. Clients can never write to `user_roles` directly.
 
 ### 2.5 Navigation
 
 - **Mobile (360px and up):** bottom navigation with five tabs as in the brief: Dashboard, Goals, Planner, Progress, AI Tutor.
 - **Desktop (1024px and up):** left sidebar with the same five items, plus Lesson Journey, Strategy Library and My Library.
 - **Tablet (768px and up):** bottom navigation, wider two-column cards.
-- **Header:** WS12 logo on the left (no hamburger menu, per `CLAUDE.md`), centred "WS12 / WINNING STRATEGIES FOR GRADE 12" on wider screens, notification bell with unread badge and profile avatar on the right.
+- **Header (all sizes):** as in the brief, the centre shows the wordmark "WS12 / WINNING STRATEGIES FOR GRADE 12" (stacked on mobile); the right shows the notification bell with unread badge and the profile avatar. The brief's left hamburger icon is not used (`CLAUDE.md`): on the Dashboard the left slot is empty, and on inner screens it holds a Back button.
 - **Avatar menu:** Profile, My Library, Family (parent linking), Settings, Help, Logout.
 - **Lesson Journey, Strategy Library and Self-assessments** are reached from Dashboard cards and from the Strategy Library. See Chapter 15 for an open question about giving the Journey its own tab.
 
@@ -225,15 +228,16 @@ Other roles: Parent home (Chapter 13), Admin (Chapter 11), School Portal (Chapte
 - **Purpose:** create an account or sign in with the same login used on winstrat12.co.za.
 - **Shows:** Register asks only for email and password (or Google), plus one question: "Are you 18 or older?" (Yes / No). We do not ask for a date of birth at this point. Sign in asks for email and password, with "Forgot password". Both offer "I'm a parent" to switch to the parent sign-up path (Chapter 13).
 - **States:** clear field errors ("That email already has an account. Sign in instead?"); email verification screen with "Resend email" after 60 seconds.
+- **Age answer is locked.** The answer is saved once, at sign-up, by a `declare_age()` security definer function into `age_declarations`. The learner cannot change it later in the app; a mistake is corrected through support. Choosing "I'm a parent" requires answering Yes.
 - **Next action:** Create account, then onboarding (or Consent if under 18).
 
 ### 3.3 Parental consent (S2)
 
 - **Purpose:** POPIA requires consent from a parent or guardian before we process a child's personal information beyond what is needed to ask for that consent.
-- **Shows (learner under 18):** "Before we start, a parent or guardian needs to say yes." Two options: "My parent already has a WS12 account" (enter their invite code) or "Send my parent a link" (parent's email or cell number). Explains in one sentence what the parent will see (a weekly summary, not private chats or answers).
-- **Until consent is given (proposed):** the learner can complete onboarding and use the demo-style experience on the device, but nothing beyond the account email, age answer and parent contact is saved to the server, and the AI Tutor is off. When the parent consents, onboarding answers are saved.
+- **Shows (learner under 18):** "Before we start, a parent or guardian needs to say yes." Two options: "My parent already has a WS12 account" (enter their invite code) or "Send my parent a link" (parent's email, or cell number once an SMS provider is chosen, Chapter 15, question 24). Explains in one sentence what the parent will see (a weekly summary, not private chats or answers).
+- **Until consent is given (proposed):** the learner can complete onboarding and use the demo-style experience on the device, but nothing beyond the account email, age answer and parent contact is saved to the server, and the AI Tutor is off. When the parent consents, onboarding answers are saved. Every consent check (saving onboarding answers, the AI Tutor in 7.4) calls a `has_consent()` function that reads `age_declarations` and `parental_consents`. It never trusts a flag the client can edit.
 - **Parent side:** a consent page that says who is asking, what is collected, why, and how to withdraw. Buttons "I give consent" and "This is not my child".
-- **States:** "Waiting for your parent" with "Resend" and "Change contact". Sending real messages to real parents needs Didi's approval before go-live.
+- **States:** "Waiting for your parent" with "Resend" and "Change contact". The parent's contact is kept encrypted in `consent_contacts` only so that Resend works, and is deleted as soon as consent is given or the request expires (proposed: 30 days). Sending real messages to real parents needs Didi's approval before go-live.
 - **Next action:** Send my parent a link.
 
 ### 3.4 Onboarding, 5 steps (S2)
@@ -245,7 +249,7 @@ Other roles: Parent home (Chapter 13), Admin (Chapter 11), School Portal (Chapte
 - **Step 4, Study time:** study availability (which days) and preferred study times (morning, afternoon, evening, late).
 - **Step 5, Goals and interests:** one academic goal (suggested goals from targets) and career interests (optional chips). Ends with "Start my journey".
 - **Not asked:** surname, ID number, address, phone, gender, race, home language beyond the app language choice. Surname is optional later in Profile only if needed for certificates.
-- **States:** answers are saved per step, so closing the app does not lose progress. Skipped optional fields lead to friendly empty states later.
+- **States:** answers are saved per step (on the device only, for a learner waiting for consent), so closing the app does not lose progress. Skipped optional fields lead to friendly empty states later.
 - **Next action:** Next, then "Start my journey" which opens the Dashboard with a first-time welcome.
 
 ### 3.5 Dashboard (S3)
@@ -263,7 +267,7 @@ Other roles: Parent home (Chapter 13), Admin (Chapter 11), School Portal (Chapte
 - **States:** each card loads on its own skeleton; one failing card shows a small retry and does not break the page. Demo mode shows a fixed "Demo data" banner.
 - **Next action:** the Your Next Win button. If there is no recommendation yet, the first unticked task.
 
-### 3.6 Exam calendar (S3)
+### 3.6 Exam calendar (S3, proposed)
 
 - **Purpose:** see all upcoming exam dates.
 - **Shows:** list of the learner's exams (trials and finals, per subject when the timetable is loaded), with days to go. Dates marked "Provisional" until confirmed by an admin. "Edit my dates" for learner overrides.
@@ -274,7 +278,7 @@ Other roles: Parent home (Chapter 13), Admin (Chapter 11), School Portal (Chapte
 
 - **Purpose:** turn ambitions into tracked targets.
 - **Shows:** goal cards grouped by type (academic, subject, study, exam, personal development). Each card: title (for example "Improve Mathematics from 55% to 70%"), current, target, progress percentage, deadline, and an action button ("Continue practice"). Floating "New goal" button.
-- **Create or edit goal:** type, subject (if relevant), title, current value, target value, deadline. Validation stops impossible values (target below current for "improve" goals is allowed only with a warning).
+- **Create or edit goal:** type, subject (if relevant), title, current value, target value, deadline. Validation blocks empty titles, marks outside 0 to 100 and deadlines in the past. A target below the current value is allowed but shows a warning ("Your target is lower than where you are now. Is that right?").
 - **Empty:** "You haven't created a goal yet." with "CREATE MY FIRST GOAL".
 - **Next action:** the action button on the goal closest to its deadline.
 
@@ -289,7 +293,8 @@ Other roles: Parent home (Chapter 13), Admin (Chapter 11), School Portal (Chapte
 ### 3.9 Progress (S5)
 
 - **Purpose:** answer "Where am I? What is improving? What needs attention?"
-- **Shows:** overall progress at the top; subject bars (for example "Mathematics 72%") where the percentage comes from the learner's own logged marks and completed work; study hours this week; tasks completed; current and longest streak; weekly and monthly activity charts; goal completion; Lesson Journey progress ("14 of 52 lessons"); latest self-assessment dates. Each block has an action ("Physics needs attention" with "Practice Physics").
+- **Shows:** overall progress at the top; subject bars (for example "Mathematics 72%"); study hours this week; tasks completed; current and longest streak; weekly and monthly activity charts; goal completion; Lesson Journey progress ("14 of 52 lessons"); latest self-assessment dates. Each block has an action ("Physics needs attention" with "Practice Physics").
+- **Formulas:** a subject's percentage is the average of the learner's three most recent `subject_marks` for that subject. With no marks logged it uses `current_mark` from `learner_subjects`; with neither, the bar shows "Add a mark" instead of a number. The bar always says how many marks it is based on. "Needs attention" means the percentage is at least 10 points below `target_mark` (configurable). Overall study progress is tasks completed this week divided by tasks planned this week.
 - **Charts:** simple bar charts from real state, lazy-loaded, with a text summary for screen readers.
 - **Empty:** "Your progress shows up after your first study session." with "START STUDYING".
 - **Next action:** the action on the weakest subject.
@@ -297,13 +302,13 @@ Other roles: Parent home (Chapter 13), Admin (Chapter 11), School Portal (Chapte
 ### 3.10 AI Tutor (S6)
 
 - **Purpose:** a supportive study assistant that answers from approved WS12 content.
-- **Shows:** greeting with the learner's first name ("Hi Thabo, what are we working on today?"), suggested actions: Explain a concept, Help me study, Give me a quiz, Explain my mistake, Create a study plan. Chat thread, input box, and a small line: "WS12 Tutor uses the WS12 book. Check with your teacher if you're unsure." Answers that use book content show their source ("From MLS 14").
+- **Shows:** greeting with the learner's first name, built in the app and never sent to the model ("Hi Thabo, what are we working on today?"), suggested actions: Explain a concept, Help me study, Give me a quiz, Explain my mistake, Create a study plan. Chat thread, input box, and a small line: "WS12 Tutor uses the WS12 book. Check with your teacher if you're unsure." Answers that use book content show their source ("From MLS 14").
 - **When content does not cover a question:** "I don't have WS12 content on that yet. Your teacher is the best person to ask." It never invents lessons, quotes or statistics.
 - **States:** typing indicator, timeout with retry, daily usage limit message (proposed, to control cost), offline: "The Tutor needs a connection."
 - **Locked for under-18 learners until parental consent** is given.
 - **Next action:** tap a suggested action.
 
-### 3.11 Lesson Journey (S3 card, full screen proposed for S4 or S5)
+### 3.11 Lesson Journey (S3 card, full screen proposed for S4)
 
 - **Purpose:** the 52-week journey through the book, one lesson a week. A key differentiator.
 - **Shows:** a vertical path of 52 lessons (MLS 1 to 52) grouped by school term. Each item: number, title in the learner's language, state (done, unlocked, locked with unlock date). Progress "14 of 52" and the countdown to trials and finals at the top. Locked lessons show "Unlocks on Monday 12 April" style text and cannot be opened.
@@ -311,7 +316,7 @@ Other roles: Parent home (Chapter 13), Admin (Chapter 11), School Portal (Chapte
 - **Empty or pre-season:** "Your journey starts in January. Here's a taste of week 1." with "READ THE PREVIEW".
 - **Next action:** Read this week's lesson (or the oldest unread unlocked lesson).
 
-### 3.12 Lesson (S4 or S5, proposed)
+### 3.12 Lesson (S4, proposed)
 
 - **Purpose:** read and act on one weekly lesson.
 - **Shows:** lesson number and title, reading time, the lesson text from the book, then the lesson's activity (for example a reflection question or a short exercise), an optional short quiz, and "Mark lesson complete". Text-first and light on data; optional audio or video only on tap. Language switch per lesson if both versions exist.
@@ -328,7 +333,7 @@ Other roles: Parent home (Chapter 13), Admin (Chapter 11), School Portal (Chapte
 - **Empty:** "Get to know yourself as a learner. It takes about 10 minutes." with "TAKE MY FIRST SELF-ASSESSMENT" (time to be confirmed from the book).
 - **Next action:** Take or retake the next questionnaire.
 
-### 3.14 Strategy Library (S3)
+### 3.14 Strategy Library (S3, proposed)
 
 - **Purpose:** browse WS12 strategies and tips beyond Tip of the Day.
 - **Shows:** search, filters (topic, lesson), tip cards, links into the Lesson Journey and Self-assessments. Content comes from the content and tips tables; only approved items appear.
@@ -339,7 +344,7 @@ Other roles: Parent home (Chapter 13), Admin (Chapter 11), School Portal (Chapte
 
 - **Purpose:** one place for reminders and announcements.
 - **Shows:** list grouped by Today and Earlier. Types: study reminder, goal reminder, streak reminder, new strategy, exam countdown, achievement, important announcement, plus "new lesson unlocked" and parent link requests. Unread items are bold; opening marks read; "Mark all as read". Each notification links to its action.
-- **Limits:** at most one reminder push per day by default; quiet hours from 21:30 to 06:00 (proposed); every type can be turned off in Settings. No guilt-based copy.
+- **Limits:** at most one reminder push per day by default; quiet hours by default from 22:30 to 06:00 (proposed). If the learner chose "late" study times in onboarding, quiet hours start one hour after their latest study time instead, so late studiers still get their reminder. The learner can change quiet hours in Settings; every type can be turned off in Settings. No guilt-based copy.
 - **Empty:** "You're all caught up."
 - **Next action:** tap the newest unread notification.
 
@@ -347,6 +352,7 @@ Other roles: Parent home (Chapter 13), Admin (Chapter 11), School Portal (Chapte
 
 - **Purpose:** see and edit learner information.
 - **Shows:** name, school, grade, subjects, target marks, current streak, goals summary, achievements, exam dates, linked parents, and "Edit". "Settings" link.
+- **States:** skeleton while loading; on error, "We couldn't load your profile." with Retry. Missing optional fields show an "Add" prompt instead of a blank. Saving shows "Saved"; a failed save keeps the edits on screen with "Try again".
 - **Next action:** Edit profile (or "Add your exam date" if missing).
 
 ### 3.17 My Library (S2)
@@ -355,31 +361,37 @@ Other roles: Parent home (Chapter 13), Admin (Chapter 11), School Portal (Chapte
 - **Shows:** "My books" with English and Afrikaans editions the person owns, each with file size and "Download"; "Bonus files" for their tier; free planners for every free account. Locked items show which tier includes them and "Upgrade".
 - **How it works:** files sit in private Supabase storage. Tapping Download calls an edge function that checks the entitlement and returns a short-lived signed link.
 - **Empty (free account):** "Your free planners are ready." with "DOWNLOAD PLANNER" and a soft "See the full book" link.
+- **Errors:** a download that fails or stops shows "The download didn't finish. Try again, ideally on Wi-Fi." with Retry. If the entitlement check fails, "We couldn't confirm your purchase." with "Contact support" and the purchase reference, so support can help quickly. An expired link is renewed automatically on Retry.
 - **Next action:** Download.
 
 ### 3.18 Family (parent linking) (S2)
 
 - **Purpose:** link learner and parent accounts both ways.
-- **Learner view:** linked parents, "Add a parent" (send link by email or cell number, or enter the parent's invite code), "Remove". Plain-language list of what parents can see.
+- **Learner view:** linked parents, "Add a parent" (send a link by email, or by SMS once a provider is chosen, or enter the parent's invite code), "Remove". Plain-language list of what parents can see.
 - **Parent view:** linked children, "Invite my child" (shows an invite code and share link for WhatsApp), pending invites, "Remove".
 - **Rules:** a link becomes active only when both sides have accepted. Either side can remove it at any time.
+- **Empty:** learner: "No parent linked yet. A parent gets a short weekly summary so they can support you." with "ADD A PARENT". Parent: "Invite your child to get started." with "INVITE MY CHILD".
+- **States:** pending links show "Waiting for [first name] to accept" with Resend and Cancel. A wrong or expired code shows "That code didn't work. Check it or ask for a new one." Too many wrong tries: "Please wait a while and try again." Errors offer Retry.
 - **Next action:** Add a parent (learner) or Invite my child (parent).
 
-### 3.19 Settings (S2)
+### 3.19 Settings (S2, proposed)
 
 - **Shows:** language, notification types and quiet hours, study reminder time, data saver, exam dates, privacy (download my data, delete my account request, parent links), Log out.
+- **States:** each change saves straight away with a small "Saved". If a save fails, the control switches back and shows "Couldn't save. Try again." Loading shows the last saved values.
 - **Next action:** none required; "Done" returns to the previous screen.
 
-### 3.20 Help (S2)
+### 3.20 Help (S2, proposed)
 
 - **Shows:** short FAQs (account, payments, My Library, parent linking, privacy), "Contact support" (email link), and a "Need someone to talk to?" section with verified South African support lines (to be supplied and checked by Didi).
+- **States:** FAQs are bundled with the app, so they work offline. "Contact support" opens the email app; if there is none, the support address is shown with a Copy button.
 - **Next action:** Contact support.
 
-### 3.21 Logout
+### 3.21 Logout (S2, proposed)
 
 - From the avatar menu or Settings. Confirms "Log out of WS12?", clears the session on the device, returns to Welcome. Queued offline changes are synced first, or the learner is warned if they cannot be.
+- **Next action:** Log out (the confirm button). On Welcome, the next action is to sign in again.
 
-### 3.22 Achievements (S3, inside Profile)
+### 3.22 Achievements (S3, proposed, inside Profile)
 
 - **Shows:** earned milestones (streaks at 3, 5, 7, 14, 30, 60, 100 days; first goal; lessons completed; first self-assessment) and the next one to earn. Celebrations are short and skippable. No rewards that look like gambling.
 - **Next action:** the action that earns the next achievement.
@@ -387,6 +399,7 @@ Other roles: Parent home (Chapter 13), Admin (Chapter 11), School Portal (Chapte
 ### 3.23 Demo mode (S1)
 
 - Seed learner Thabo Mokoena, Grade 12, subjects Mathematics, Physical Sciences, English Home Language, Life Orientation. A fixed "Demo data" banner on every screen, and nothing is written to real learner tables. "Create my own account" is always visible.
+- **Next action:** Create my own account.
 
 ---
 
@@ -394,55 +407,57 @@ Other roles: Parent home (Chapter 13), Admin (Chapter 11), School Portal (Chapte
 
 **Must** = needed for the first public release. **Should** = in version 1 if time allows. **Later** = after version 1. Sprints refer to `SPRINTS.md`. Items marked "proposed sprint" are not yet boxes in `SPRINTS.md` and need Didi's approval to add (Chapter 15).
 
-| Feature                                                          | Priority | Sprint               |
-| ---------------------------------------------------------------- | -------- | -------------------- |
-| Project foundation, folder structure, CI                         | Must     | S1                   |
-| Full schema with RLS on every table                              | Must     | S1                   |
-| App shell: bottom nav, sidebar, avatar menu (no hamburger)       | Must     | S1                   |
-| English and Afrikaans i18n layer                                 | Must     | S1                   |
-| Demo mode (Thabo Mokoena)                                        | Must     | S1                   |
-| Welcome, Google sign-in, email sign-in, shared website login     | Must     | S2                   |
-| Parental consent for under-18 learners                           | Must     | S2                   |
-| 5-step onboarding                                                | Must     | S2                   |
-| Profile view and edit                                            | Must     | S2                   |
-| My Library (books EN and AF, bonus files by tier, free planners) | Must     | S2                   |
-| PayFast ITN and Stripe webhooks (sandbox)                        | Must     | S2                   |
-| Parent linking both ways                                         | Must     | S2                   |
-| Settings, Help, Logout                                           | Must     | S2                   |
-| Real exam countdown (trials and finals)                          | Must     | S3                   |
-| Today's Study Plan with saving tasks                             | Must     | S3                   |
-| Streak card and milestones                                       | Must     | S3                   |
-| Tip of the Day and Strategy Library                              | Must     | S3                   |
-| Your Next Win (rule-based)                                       | Must     | S3                   |
-| Notifications centre with unread badge                           | Must     | S3                   |
-| This week's lesson card on the Dashboard                         | Must     | S3 (proposed sprint) |
-| Lesson Journey screen and Lesson screen (52 weeks)               | Must     | S4 (proposed sprint) |
-| Goals                                                            | Must     | S4                   |
-| Planner (today, week, month)                                     | Must     | S4                   |
-| Streak engine hardened                                           | Must     | S4                   |
-| Self-assessments with saved results and retakes                  | Must     | S5 (proposed sprint) |
-| Progress screen with real charts                                 | Must     | S5                   |
-| Recommendation engine v2                                         | Must     | S5                   |
-| Analytics events                                                 | Must     | S5                   |
-| Parent weekly summary data (sending needs Didi's approval)       | Must     | S5                   |
-| Parent home screen (Chapter 13)                                  | Must     | S5 (proposed sprint) |
-| AI Tutor with retrieval from approved content                    | Must     | S6                   |
-| First approved lessons in the knowledge base                     | Must     | S6                   |
-| PWA install and offline shell                                    | Must     | S7                   |
-| Performance, security, accessibility, privacy pages              | Must     | S7                   |
-| Staging deployment (production only with Didi's approval)        | Must     | S7                   |
-| Admin dashboard: content approval, tips, exam dates, support     | Should   | S5 to S7 (proposed)  |
-| Achievements screen                                              | Should   | S3                   |
-| Push notifications                                               | Should   | S7                   |
-| Offline task ticks with sync                                     | Should   | S7                   |
-| Shared session cookie across website and app                     | Later    | After v1             |
-| Apple sign-in                                                    | Later    | After v1             |
-| AI Study Planner Agent generating sessions                       | Later    | After v1             |
-| Other AI agents (Motivation, Exam Preparation, Parent Support)   | Later    | After v1             |
-| School Portal, teacher accounts, bulk licences                   | Later    | After v1             |
-| Affiliate programme tracking and payouts                         | Later    | After v1             |
-| Curriculum content and past papers in the knowledge base         | Later    | After v1             |
-| Native apps (Expo) and app store release                         | Later    | After v1             |
+| Feature                                                          | Priority | Sprint                     |
+| ---------------------------------------------------------------- | -------- | -------------------------- |
+| Project foundation, folder structure, CI                         | Must     | S1                         |
+| Full schema with RLS on every table                              | Must     | S1                         |
+| App shell: bottom nav, sidebar, avatar menu (no hamburger)       | Must     | S1                         |
+| English and Afrikaans i18n layer                                 | Must     | S1                         |
+| Demo mode (Thabo Mokoena)                                        | Must     | S1                         |
+| Welcome, Google sign-in, email sign-in, shared website login     | Must     | S2                         |
+| Parental consent for under-18 learners                           | Must     | S2                         |
+| 5-step onboarding                                                | Must     | S2                         |
+| Profile view and edit                                            | Must     | S2                         |
+| My Library (books EN and AF, bonus files by tier, free planners) | Must     | S2                         |
+| PayFast ITN and Stripe webhooks (sandbox)                        | Must     | S2                         |
+| Parent linking both ways                                         | Must     | S2                         |
+| Settings, Help, Logout                                           | Must     | S2 (proposed sprint)       |
+| Real exam countdown (trials and finals)                          | Must     | S3                         |
+| Exam calendar screen                                             | Must     | S3 (proposed sprint)       |
+| Today's Study Plan with saving tasks                             | Must     | S3                         |
+| Streak card and milestones                                       | Must     | S3                         |
+| Tip of the Day                                                   | Must     | S3                         |
+| Strategy Library                                                 | Must     | S3 (proposed sprint)       |
+| Your Next Win (rule-based)                                       | Must     | S3                         |
+| Notifications centre with unread badge                           | Must     | S3                         |
+| This week's lesson card on the Dashboard                         | Must     | S3 (proposed sprint)       |
+| Lesson Journey screen and Lesson screen (52 weeks)               | Must     | S4 (proposed sprint)       |
+| Goals                                                            | Must     | S4                         |
+| Planner (today, week, month)                                     | Must     | S4                         |
+| Streak engine hardened                                           | Must     | S4                         |
+| Self-assessments with saved results and retakes                  | Must     | S5 (proposed sprint)       |
+| Progress screen with real charts                                 | Must     | S5                         |
+| Recommendation engine v2                                         | Must     | S5                         |
+| Analytics events                                                 | Must     | S5                         |
+| Parent weekly summary data (sending needs Didi's approval)       | Must     | S5                         |
+| Parent home screen (Chapter 13)                                  | Must     | S5 (proposed sprint)       |
+| AI Tutor with retrieval from approved content                    | Must     | S6                         |
+| First approved lessons in the knowledge base                     | Must     | S6                         |
+| PWA install and offline shell                                    | Must     | S7                         |
+| Performance, security, accessibility, privacy pages              | Must     | S7                         |
+| Staging deployment (production only with Didi's approval)        | Must     | S7                         |
+| Admin dashboard: content approval, tips, exam dates, support     | Should   | S5 to S7 (proposed sprint) |
+| Achievements screen                                              | Should   | S3 (proposed sprint)       |
+| Push notifications                                               | Should   | S7 (proposed sprint)       |
+| Offline task ticks with sync                                     | Should   | S7 (proposed sprint)       |
+| Shared session cookie across website and app                     | Later    | After v1                   |
+| Apple sign-in                                                    | Later    | After v1                   |
+| AI Study Planner Agent generating sessions                       | Later    | After v1                   |
+| Other AI agents (Motivation, Exam Preparation, Parent Support)   | Later    | After v1                   |
+| School Portal, teacher accounts, bulk licences                   | Later    | After v1                   |
+| Affiliate programme tracking and payouts                         | Later    | After v1                   |
+| Curriculum content and past papers in the knowledge base         | Later    | After v1                   |
+| Native apps (Expo) and app store release                         | Later    | After v1                   |
 
 ---
 
@@ -451,13 +466,13 @@ Other roles: Parent home (Chapter 13), Admin (Chapter 11), School Portal (Chapte
 ### 5.1 Learner signs up (learner first)
 
 1. Thabo sees a WS12 TikTok and taps the link to winstrat12.co.za, or opens app.winstrat12.co.za directly.
-2. On the website he creates a free account (lead capture) and gets the free planners, or taps "Open the app".
+2. On the website he answers "Are you 18 or older?" No, and is sent to the app's Register screen (2.3). No email is stored on the website.
 3. In the app: Welcome, choose language, "Continue with Google".
 4. Answers "Are you 18 or older?" No.
-5. Consent screen: "Send my parent a link". Enters his mother's cell number or email. The parent receives a consent link (real sending needs Didi's approval before go-live).
+5. Consent screen: "Send my parent a link". Enters his mother's email (or cell number once an SMS provider is chosen). The parent receives a consent link (real sending needs Didi's approval before go-live).
 6. Completes the 5-step onboarding while waiting. Answers stay on the device.
 7. Parent taps the link, signs up or signs in as a parent, gives consent. The link between them is created at the same time.
-8. Thabo's onboarding answers are saved, the AI Tutor unlocks, and he lands on the Dashboard with a first-time welcome and Your Next Win: "Read this week's lesson".
+8. Thabo's onboarding answers are saved, the AI Tutor unlocks, and he lands on the Dashboard with a first-time welcome. He has no plan for today yet, so Your Next Win says "Plan today's study" (rule 2 in 7.3). Once the plan exists, this week's lesson appears in it as a task. In pre-season, the Journey card offers the MLS 1 preview instead.
 
 Learners aged 18 or older skip steps 5 and 7.
 
@@ -475,7 +490,7 @@ Learners aged 18 or older skip steps 5 and 7.
 ### 5.3 Learner adds a parent (learner already has an account)
 
 1. Learner opens avatar menu, Family, "Add a parent".
-2. Either enters the parent's invite code (if the parent already has an account) or sends a link by email or cell number.
+2. Either enters the parent's invite code (if the parent already has an account) or sends a link by email (or SMS once a provider is chosen).
 3. Parent opens the link, signs in or registers as a parent, and accepts.
 4. Both see the link in Family. The learner sees exactly what the parent can see. Either can remove the link.
 
@@ -513,16 +528,18 @@ All tables live in the one Supabase Postgres database, in the `public` schema un
 
 **Identity and people**
 
-| Table                      | Key columns                                                                                                                                                 | Notes                                                       |
-| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
-| `auth.users`               | Managed by Supabase Auth                                                                                                                                    | The "users" table from the brief. Shared by website and app |
-| `profiles`                 | `id` (= auth user id), `first_name`, `grade`, `school_id`, `province`, `language` (en, af), `is_adult` (bool), `onboarding_step`, `onboarded_at`, `is_demo` | One per person. No ID number, no address                    |
-| `user_roles`               | `user_id`, `role` (learner, parent, teacher, admin)                                                                                                         | Admin-managed only                                          |
-| `parental_consents`        | `id`, `learner_id`, `parent_user_id`, `contact_hash`, `status` (pending, given, withdrawn), `given_at`, `withdrawn_at`, `policy_version`                    | Proof of POPIA consent                                      |
-| `parent_links`             | `id`, `learner_id`, `parent_id`, `status` (pending, active, removed), `initiated_by`, `created_at`                                                          | Both directions use this one table                          |
-| `invites`                  | `id`, `code` (short, random), `created_by`, `kind` (parent_to_learner, learner_to_parent), `expires_at`, `used_at`                                          | Codes expire; single use                                    |
-| `schools`                  | `id`, `name`, `province`, `emis_number` (optional)                                                                                                          | Public list; admin-managed                                  |
-| `notification_preferences` | `user_id`, per-type toggles, `quiet_start`, `quiet_end`, `reminder_time`                                                                                    |                                                             |
+| Table                      | Key columns                                                                                                                                                                                                             | Notes                                                                                                               |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `auth.users`               | Managed by Supabase Auth                                                                                                                                                                                                | The "users" table from the brief. Shared by website and app                                                         |
+| `profiles`                 | `id` (= auth user id), `first_name`, `grade`, `school_id`, `province`, `school_name_other` (text, when the school is not listed; reviewed by admins), `language` (en, af), `onboarding_step`, `onboarded_at`, `is_demo` | One per person. No ID number, no address. Created by the sign-up trigger; Google name and picture are not copied in |
+| `age_declarations`         | `user_id`, `is_adult` (bool), `declared_at`                                                                                                                                                                             | Written once by `declare_age()`; no client update                                                                   |
+| `user_roles`               | `user_id`, `role` (learner, parent, teacher, admin)                                                                                                                                                                     | Admin-managed only                                                                                                  |
+| `parental_consents`        | `id`, `learner_id`, `parent_user_id`, `contact_hash`, `status` (pending, given, withdrawn), `given_at`, `withdrawn_at`, `policy_version`                                                                                | Proof of POPIA consent                                                                                              |
+| `consent_contacts`         | `consent_id`, `channel` (email, sms), `contact_encrypted`, `expires_at`                                                                                                                                                 | Encrypted parent contact for Resend only; deleted when consent is given or expires; no client access                |
+| `parent_links`             | `id`, `learner_id`, `parent_id`, `status` (pending, active, removed), `initiated_by`, `created_at`                                                                                                                      | Both directions use this one table                                                                                  |
+| `invites`                  | `id`, `code` (short, random), `created_by`, `kind` (parent_to_learner, learner_to_parent), `expires_at`, `used_at`                                                                                                      | Codes expire; single use                                                                                            |
+| `schools`                  | `id`, `name`, `province`, `emis_number` (optional)                                                                                                                                                                      | Public list; admin-managed                                                                                          |
+| `notification_preferences` | `user_id`, per-type toggles, `quiet_start`, `quiet_end`, `reminder_time`                                                                                                                                                |                                                                                                                     |
 
 **Study**
 
@@ -532,7 +549,7 @@ All tables live in the one Supabase Postgres database, in the `public` schema un
 | `learner_subjects`     | `learner_id`, `subject_id`, `target_mark`, `current_mark`                                                                                           | Current mark is entered by the learner                                            |
 | `subject_marks`        | `id`, `learner_id`, `subject_id`, `mark`, `kind` (test, assignment, practice, trial), `recorded_on`                                                 | History for progress and Next Win                                                 |
 | `exam_dates`           | `id`, `year`, `kind` (trial, final), `subject_id` (nullable), `starts_on`, `status` (provisional, confirmed), `source_note`                         | Admin-managed calendar                                                            |
-| `learner_exam_dates`   | `learner_id`, `kind`, `starts_on`                                                                                                                   | Learner overrides                                                                 |
+| `learner_exam_dates`   | `learner_id`, `kind`, `subject_id` (nullable), `starts_on`                                                                                          | Learner overrides                                                                 |
 | `goals`                | `id`, `learner_id`, `type` (academic, subject, study, exam, personal), `subject_id`, `title`, `current_value`, `target_value`, `deadline`, `status` |                                                                                   |
 | `study_sessions`       | `id`, `learner_id`, `subject_id`, `activity`, `starts_at`, `duration_minutes`, `notes`, `status`, `source` (learner, template, ai)                  | Planner items                                                                     |
 | `study_tasks`          | `id`, `learner_id`, `session_id` (nullable), `lesson_id` (nullable), `subject_id`, `title`, `due_on`, `start_time`, `end_time`, `completed_at`      | Today's Study Plan                                                                |
@@ -548,7 +565,7 @@ All tables live in the one Supabase Postgres database, in the `public` schema un
 | Table                         | Key columns                                                                                                                                                                                                                                                              | Notes                                             |
 | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------- |
 | `content`                     | `id`, `kind` (chapter, strategy, topic, lesson, activity, framework, story, quiz, explanation), `parent_id`, `slug`, `title_en`, `title_af`, `body_en`, `body_af`, `status` (draft, in_review, approved, retired), `version`, `approved_by`, `approved_at`, `source_ref` | The brief's "content" table. Tree via `parent_id` |
-| `lessons`                     | `content_id`, `mls_number` (1 to 52), `week_number`, `reading_minutes`, `min_tier`                                                                                                                                                                                       | Weekly lesson metadata                            |
+| `lessons`                     | `id`, `content_id`, `mls_number` (1 to 52), `week_number`, `reading_minutes`, `min_tier`                                                                                                                                                                                 | Weekly lesson metadata                            |
 | `lesson_progress`             | `learner_id`, `lesson_id`, `opened_at`, `completed_at`, `reflection` (private text)                                                                                                                                                                                      |                                                   |
 | `tips`                        | `id`, `text_en`, `text_af`, `content_id` (nullable), `status`, `starts_on`                                                                                                                                                                                               | Tip of the Day                                    |
 | `questionnaires`              | `id`, `slug`, `title_en`, `title_af`, `intro_en`, `intro_af`, `scoring_rule`, `status`, `version`                                                                                                                                                                        | The five profiling questionnaires                 |
@@ -556,16 +573,18 @@ All tables live in the one Supabase Postgres database, in the `public` schema un
 | `questionnaire_results_bands` | `questionnaire_id`, `band`, `min_score`, `max_score`, `label_en`, `label_af`, `meaning_en`, `meaning_af`, `next_step_content_id`                                                                                                                                         | From the book only                                |
 | `assessment_attempts`         | `id`, `learner_id`, `questionnaire_id`, `questionnaire_version`, `started_at`, `completed_at`, `score`, `band`, `shared_with_parent` (bool)                                                                                                                              | Saved results; retakes add new rows               |
 | `assessment_answers`          | `attempt_id`, `item_id`, `answer`                                                                                                                                                                                                                                        | Private                                           |
+| `worksheet_answers`           | `id`, `learner_id`, `activity_content_id`, `content_version`, `answers` (json), `saved_at`                                                                                                                                                                               | Guided worksheets (8.3); private                  |
+| `plan_templates`              | `id`, `title_en`, `title_af`, `items` (json), `source_content_id`, `status`                                                                                                                                                                                              | Study plan templates (8.2); admin-managed         |
 
 **Commerce and library**
 
-| Table            | Key columns                                                                                                                                | Notes                             |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------- |
-| `products`       | `id`, `code`, `tier` (free, r99, r199, r349), `price_cents`, `active`                                                                      | Prices are set by Didi only       |
-| `library_files`  | `id`, `title_en`, `title_af`, `language`, `storage_path`, `min_tier`, `kind` (book, bonus, planner), `size_bytes`                          | Files in a private bucket         |
-| `purchases`      | `id`, `buyer_email`, `buyer_user_id`, `product_id`, `provider` (payfast, stripe), `provider_ref`, `amount_cents`, `status`, `raw_event_id` | Written only by webhook functions |
-| `entitlements`   | `id`, `user_id` (nullable until claimed), `email`, `tier`, `source_purchase_id`, `granted_for_learner_id` (nullable)                       | What a person may access          |
-| `payment_events` | `id`, `provider`, `event_id` (unique), `received_at`, `payload_hash`                                                                       | Idempotency for webhooks          |
+| Table            | Key columns                                                                                                                                                     | Notes                                                      |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| `products`       | `id`, `code`, `tier` (free, r99, r199, r349), `price_cents`, `active`                                                                                           | Prices are set by Didi only                                |
+| `library_files`  | `id`, `title_en`, `title_af`, `language`, `storage_path`, `min_tier`, `kind` (book, bonus, planner), `size_bytes`                                               | Files in a private bucket                                  |
+| `purchases`      | `id`, `buyer_email`, `buyer_user_id`, `product_id`, `provider` (payfast, stripe), `provider_ref`, `amount_cents`, `status`, `raw_event_id`                      | Written only by webhook functions                          |
+| `entitlements`   | `id`, `user_id` (nullable until claimed), `email`, `tier`, `status` (active, inactive), `source_purchase_id`, `granted_for_learner_id` (nullable), `claimed_at` | What a person may access; refunds set `status` to inactive |
+| `payment_events` | `id`, `provider`, `event_id` (unique), `received_at`, `payload_hash`                                                                                            | Idempotency for webhooks                                   |
 
 **AI and analytics**
 
@@ -593,11 +612,41 @@ All tables live in the one Supabase Postgres database, in the `public` schema un
 2. **Own rows.** Learner tables use `learner_id = auth.uid()` for select, insert, update and delete, with `with check` on inserts and updates so a learner cannot write rows for someone else.
 3. **Parents read summaries, not raw data.** Parents never get select access to learner tables directly. They read from a `parent_learner_summary` view backed by a `security definer` function that first checks an active `parent_links` row and returns only summary fields (streak, lessons completed this week, study minutes, tasks done, next exam). Reflections, AI chats and self-assessment answers are never in it; a result appears only if the learner set `shared_with_parent`.
 4. **Admins** are checked with an `is_admin()` function that reads `user_roles`. Admin-only tables and write access to content, tips, exam dates and products use it. Roles are never read from client-editable data.
-5. **Reference and content tables** (`subjects`, `schools`, `achievements`, `exam_dates`, `tips`, approved `content`, `lessons`, `questionnaires`) are readable by signed-in users only where `status = 'approved'`, and lesson bodies also check the unlock rule and `min_tier` through a function.
+5. **Reference and content tables** (`subjects`, `schools`, `achievements`, `exam_dates`, `tips`, `plan_templates`, approved `content`, `lessons`, `questionnaires`, `questionnaire_items`, `questionnaire_results_bands`) are readable by signed-in users only where `status = 'approved'`, and lesson bodies also check the unlock rule and `min_tier` through a function.
 6. **Server-written tables** (`purchases`, `entitlements`, `payment_events`, `streaks`, `learner_achievements`) have no client write policies. They are written by edge functions using the service role, or by `security definer` database functions.
 7. **Storage:** buckets are private. Downloads go through an edge function that checks entitlements and returns a signed URL valid for a few minutes.
 8. **Demo data** is flagged `is_demo` and isolated from real learner data.
-9. **Tests (S1 and S2):** automated RLS tests prove that learner A cannot read or write learner B's rows, a parent cannot read an unlinked learner, a parent cannot read reflections or answers, and a non-admin cannot write content.
+9. **Tables with no owner column** (`ai_messages`, `assessment_answers`, `questionnaire_items`, `questionnaire_results_bands`) get their policy through the parent row: an `exists` check that the parent row (`ai_conversations`, `assessment_attempts` or an approved `questionnaires` row) belongs to `auth.uid()` or is approved.
+10. **Sensitive flows go through `security definer` functions**, never direct writes: `declare_age()`, `claim_parent_role()`, `request_consent()`, `give_consent()`, `withdraw_consent()`, `create_invite()`, `redeem_invite()`, `remove_link()`, `claim_entitlements()`. Each checks `auth.uid()` itself and writes `audit_log`.
+11. **Invite codes cannot be enumerated.** Clients have no select on `invites` by code. `redeem_invite(code)` looks the code up on the server, returns only "valid" or "invalid", and is rate-limited per account (proposed: 5 failed tries per hour). Codes are at least 8 characters from an unambiguous alphabet, single use, and expire after 7 days (proposed).
+12. **Tests (S1 and S2):** automated RLS tests prove that learner A cannot read or write learner B's rows; a parent cannot read an unlinked learner; a parent cannot read reflections, chats, worksheet or assessment answers; a non-admin cannot write content; a learner cannot change `age_declarations` or write `user_roles`; a learner under 18 without consent cannot save onboarding data or reach the Tutor even after editing any client-side value; a person cannot read invites by code or claim a purchase with an unverified email.
+
+**Policies per table group**
+
+| Tables                                                                                                                                                                                              | Select                                                                                    | Insert, update, delete                                                                                 |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `profiles`                                                                                                                                                                                          | Own row (`id = auth.uid()`); admins                                                       | Insert by sign-up trigger; update own row; delete only through the account deletion edge function      |
+| `age_declarations`                                                                                                                                                                                  | Own row                                                                                   | `declare_age()` once; no client update or delete                                                       |
+| `user_roles`                                                                                                                                                                                        | Own rows; admins                                                                          | `claim_parent_role()` (parent only); admins for teacher and admin                                      |
+| `parental_consents`                                                                                                                                                                                 | Learner: own rows (status only); parent: rows where `parent_user_id = auth.uid()`; admins | Only through `request_consent()`, `give_consent()`, `withdraw_consent()`                               |
+| `consent_contacts`                                                                                                                                                                                  | None (edge functions only)                                                                | Edge functions only                                                                                    |
+| `parent_links`                                                                                                                                                                                      | Rows where the caller is the learner or the parent                                        | Only through `redeem_invite()`, `remove_link()`                                                        |
+| `invites`                                                                                                                                                                                           | Own invites (`created_by = auth.uid()`)                                                   | `create_invite()`, `redeem_invite()`                                                                   |
+| Study tables (`learner_subjects`, `subject_marks`, `learner_exam_dates`, `goals`, `study_sessions`, `study_tasks`, `study_activity`, `lesson_progress`, `worksheet_answers`, `assessment_attempts`) | Own rows (`learner_id = auth.uid()`)                                                      | Own rows with `with check`; requires `has_consent()`                                                   |
+| `assessment_answers`                                                                                                                                                                                | Through own `assessment_attempts` row                                                     | Through own attempt; no update after the attempt is completed                                          |
+| `streaks`, `learner_achievements`                                                                                                                                                                   | Own rows                                                                                  | Database functions only                                                                                |
+| `recommendations`                                                                                                                                                                                   | Own rows                                                                                  | Insert own rows; update only `acted_at` on own rows                                                    |
+| `notifications`                                                                                                                                                                                     | Own rows (`user_id = auth.uid()`)                                                         | Server inserts; learner may update only `read_at` on own rows                                          |
+| `notification_preferences`                                                                                                                                                                          | Own row                                                                                   | Insert and update own row                                                                              |
+| `analytics_events`                                                                                                                                                                                  | None for clients; admins through aggregate functions                                      | Insert own rows only (`user_id = auth.uid()`); server writes `purchase_completed`; no update or delete |
+| `ai_conversations`, `ai_messages`                                                                                                                                                                   | Own conversations, and messages through them                                              | `ai-gateway` edge function only                                                                        |
+| `kb_chunks`                                                                                                                                                                                         | None for clients                                                                          | `ai-gateway` and the indexing job only                                                                 |
+| `products`                                                                                                                                                                                          | Active rows, also for signed-out visitors (website prices)                                | Admins only                                                                                            |
+| `library_files`                                                                                                                                                                                     | Metadata for signed-in users (so locked items can show their tier)                        | Admins only; file access only through the download edge function                                       |
+| `purchases`, `entitlements`                                                                                                                                                                         | Own rows (`buyer_user_id` or `user_id = auth.uid()`); admins                              | Payment webhooks and `claim_entitlements()` only                                                       |
+| `payment_events`                                                                                                                                                                                    | None for clients                                                                          | Payment webhooks only                                                                                  |
+| Reference and content tables (rule 5)                                                                                                                                                               | Signed-in users, approved rows only                                                       | Admins only                                                                                            |
+| `audit_log`                                                                                                                                                                                         | Admins only                                                                               | Security definer functions and triggers only; no update or delete                                      |
 
 ### 6.4 Privacy and retention (POPIA)
 
@@ -629,7 +678,7 @@ App (src/ai/)  --->  Edge function: ai-gateway
                          |      parent-support, teacher-support (later)
                          +-- Tools the agent is allowed to use
                          |      retrieve_ws12_content (kb_chunks)
-                         |      read_learner_summary (no names beyond first name)
+                         |      read_learner_summary (no names)
                          |      propose_study_sessions (later; learner must accept)
                          +-- Model provider adapter (provider to be chosen by Didi)
                          +-- Output checks, logging to ai_messages
@@ -654,23 +703,23 @@ Not a language model. A pure TypeScript function in `src/domain/` (mirrored in t
 
 1. No exam date: "Set your exam date" (so the countdown works).
 2. No plan for today: "Plan today's study" (starter plan from onboarding times).
-3. This week's lesson not done and it is Thursday or later: "Read this week's lesson".
+3. This week's lesson not done and it is Thursday or later: "Read this week's lesson". In pre-season there is no weekly lesson, so this rule offers the MLS 1 preview once and is then skipped.
 4. A subject with marks well below target and no practice in 7 days: "Start a 20-minute [subject] session".
 5. A goal deadline within 14 days and progress behind schedule: "Continue [goal]".
 6. Streak at risk (active yesterday, nothing today, after 17:00): "Complete one task to keep your streak".
 7. Exam within 30 days: "View your exam preparation plan".
 8. Default: the first unticked task today.
 
-Thresholds are set in one config file and tuned with the `recommendations` log. Unit tests cover each rule with realistic cases.
+Rules that do not apply are skipped (for example rule 1 when the WS12 exam calendar already gives the learner's dates). Thresholds are set in one config file and tuned with the `recommendations` log. Unit tests cover each rule with realistic cases.
 
 ### 7.4 AI Tutor (S6)
 
-- **Flow:** learner asks; the gateway checks consent and limits; retrieves the most relevant approved chunks in the learner's language; if no chunk passes the relevance threshold, the Tutor replies with the "I don't have WS12 content on that yet" message and suggests asking a teacher; otherwise it answers using only those chunks and returns their source ids, shown as "From MLS 14".
-- **Suggested actions:** Explain a concept, Help me study, Give me a quiz (questions only from approved quiz content or generated strictly from retrieved text and labelled as practice), Explain my mistake, Create a study plan (proposes sessions the learner accepts in the Planner).
+- **Flow:** learner asks; the gateway checks consent with `has_consent()` and limits; retrieves the most relevant approved chunks in the learner's language; if no chunk passes the relevance threshold, the Tutor replies with the "I don't have WS12 content on that yet" message and suggests asking a teacher; otherwise it answers using only those chunks and returns their source ids, shown as "From MLS 14".
+- **Suggested actions:** Explain a concept, Help me study, Give me a quiz (only approved quiz questions from the knowledge base; the Tutor never writes new questions. If a lesson has no approved quiz yet, it says so and offers to explain the lesson instead), Explain my mistake, Create a study plan (proposes sessions the learner accepts in the Planner).
 - **Guardrails:**
   - Answers only from retrieved approved content; no outside facts presented as WS12 content.
   - Never claims to be Melvin, a teacher or a counsellor.
-  - Does not ask for or store personal details. Only the first name and grade go to the model.
+  - Does not ask for or store personal details. No name goes to the model. Only grade, language and the question are sent; the greeting with the first name is added in the app.
   - If a message suggests distress or risk of harm, the Tutor stops tutoring, responds with care, encourages talking to a trusted adult, and shows verified South African support lines (to be supplied and checked by Didi). The message is flagged for review.
   - Refuses to write assignments for the learner to hand in; offers to explain instead.
   - Daily message limit per learner (proposed) to control cost.
@@ -753,10 +802,11 @@ Curriculum-aligned content, past papers and other approved study resources can b
 ### 9.2 Payments
 
 - PayFast and Stripe are both offered at checkout.
-- Checkout starts on winstrat12.co.za (or an in-app "Upgrade" that opens the same checkout).
+- Checkout starts on winstrat12.co.za (or an in-app "Upgrade" that opens the same checkout). Both call the `create-checkout` edge function (2.3), which creates the Stripe Checkout Session or the signed PayFast request on the server. No payment secret or price is ever taken from the browser.
 - PayFast ITN and Stripe webhooks land in Supabase edge functions that verify the signature (and for PayFast, the source and amount), store the event once (`payment_events` for idempotency), then create the `purchases` and `entitlements` rows.
 - Sandbox only until Didi approves taking real payments.
-- Refunds and failed payments set the entitlement to inactive; My Library updates immediately.
+- Refunds and failed payments set the entitlement `status` to inactive; My Library updates immediately.
+- An entitlement is claimed only by an account whose email Supabase Auth has verified and which matches the buyer email (`claim_entitlements()`).
 - Parent purchases (proposed): a purchase by a parent applies to the parent's account and to one linked learner.
 
 ### 9.3 Bulk and partners (later)
@@ -843,6 +893,7 @@ Targets are not set yet. They are agreed with Didi after the first weeks of real
 
 - Route `/admin`, loaded as its own code chunk, visible only to users with the admin role. Every admin action is enforced by RLS and `is_admin()` on the server, not only hidden in the UI.
 - Every change is written to `audit_log`.
+- **Admin home:** counts of items waiting (content to review, school names to check, webhook failures, flagged Tutor messages). **Next action:** open the oldest item waiting for review.
 
 ### 11.2 Functions
 
@@ -876,7 +927,7 @@ Built after version 1. The schema reserves `classes`, `class_members` and `licen
 
 - **School account:** a school record with a bulk licence (number of seats, year, expiry).
 - **Teacher account:** a teacher role linked to a school. Creates classes and shares a class code.
-- **Learner joins a class:** enters the class code in Settings. The learner sees what the teacher will see before joining. For under-18 learners the parental consent already given covers WS12; the school's own consent processes apply for school use (to be checked).
+- **Learner joins a class:** enters the class code in Settings. The learner sees what the teacher will see before joining. For under-18 learners the parental consent already given covers WS12; the school's own consent processes may also apply for school use (Chapter 15, question 25).
 - **Teacher view:** class lesson completion by week, active learners, and anonymised subject needs. Individual learner data only at summary level (as for parents), never reflections, chats or answers.
 - **Teaching support:** the week's lesson for class use in both languages. The AI never replaces the teacher; a future Teacher Support Agent only helps prepare.
 - **Admin:** licence management and school onboarding in the admin dashboard.
@@ -943,7 +994,7 @@ Each item is also tracked in "Needs from Didi" in `SPRINTS.md` where it blocks a
 
 ### Content and IP
 
-1. **Book manuscript:** the full text of MLS 1 to 52 in English and Afrikaans in an editable format, with lesson numbers and order. Needed before lessons can be loaded (S4 or S5) and before the Tutor's first content (S6).
+1. **Book manuscript:** the full text of MLS 1 to 52 in English and Afrikaans in an editable format, with lesson numbers and order. Needed before lessons can be loaded (S4) and before the Tutor's first content (S6).
 2. **Core IP content:** the DCA formula, the DNA of a Successful Matriculant, the Pencil story and Force Field Analysis as they appear in the book, and which lessons they belong to.
 3. **The five profiling questionnaires:** names, items, answer scales, scoring rules, result bands and their meanings, in both languages.
 4. **Content approval:** who signs off each item: Didi alone, or Didi and Melvin? Default: Didi approves; nothing is published as Melvin's without Didi.
@@ -955,14 +1006,14 @@ Each item is also tracked in "Needs from Didi" in `SPRINTS.md` where it blocks a
 7. **Lesson unlock rule:** calendar-aligned (default proposed: catch up to the current school week on sign-up, then one per Monday) or personal (one per 7 days from sign-up)?
 8. **Pre-season:** what do Class of 2027 learners see between November 2026 and the start of the school year? Default proposed: a preview of MLS 1 and the countdown.
 9. **Journey placement:** keep the five bottom tabs from the brief and reach the Journey from the Dashboard (default), or replace a tab with "Journey"?
-10. **Sprint scope:** approve adding boxes to `SPRINTS.md` for the This week's lesson card (S3), Lesson Journey and Lesson screens (S4), Self-assessments (S5), Parent home (S5), Settings and Help screens (S2) and the Admin dashboard (S5 to S7). These are in this Bible but not yet in `SPRINTS.md`.
+10. **Sprint scope:** approve adding boxes to `SPRINTS.md` for the This week's lesson card (S3), Lesson Journey and Lesson screens (S4), Self-assessments (S5), Parent home (S5), Settings, Help and Logout (S2), the Exam calendar, Strategy Library and Achievements screens (S3), Push notifications and offline task sync (S7) and the Admin dashboard (S5 to S7). These are in this Bible but not yet in `SPRINTS.md`.
 11. **Reference image:** the dashboard visual reference is still missing. Until it arrives, the September prototype palette is used. Confirm the mint and cream colour values.
 12. **Header:** confirm the avatar menu with no hamburger (current default).
 13. **Grade 11 sign-ups:** allow Grade 11 learners (Class of 2027 signing up in late 2026) with the full experience?
 
 ### Privacy and safety
 
-14. **Parental consent flow:** approve the proposed POPIA flow (age question, consent link to parent, limited mode until consent). A legal review is recommended before go-live.
+14. **Parental consent flow:** approve the proposed POPIA flow (age question, consent link to parent, limited mode until consent), including the website path: the website asks the age question and sends under-18s to the app's Register screen without storing their email (2.3). A legal review is recommended before go-live.
 15. **Support lines:** supply verified South African helplines for the Help screen and the Tutor's distress response.
 16. **Retention:** approve AI chat retention (proposed 90 days) and analytics retention (proposed 24 months).
 
@@ -975,3 +1026,5 @@ Each item is also tracked in "Needs from Didi" in `SPRINTS.md` where it blocks a
 21. **Affiliates:** Student Ambassadors are likely to be under 18. How should consent and commission payouts work for minors?
 22. **School licences:** pricing and seat model for bulk licences (later).
 23. **App stores:** when native apps come, how to handle digital purchases under store rules (later).
+24. **SMS for consent requests:** sending consent links by SMS needs an SMS provider and has a cost per message. Which provider, or email only for v1? Default: email only until you decide.
+25. **School consent:** when a learner joins a school class (Chapter 12), is WS12's parental consent enough, or does the school's own consent process also apply? A legal review is recommended before the School Portal is built.

@@ -22,6 +22,8 @@ Updated by `ws12-product-lead` after every run. A sprint is DONE only when `ws12
 - [ ] Lesson unlock rule and pre-season view for the Class of 2027 - needed by Sprint 3
 - [ ] Verified South African support lines for Help and the AI Tutor - needed by Sprint 2
 - [ ] AI model provider, budget and daily Tutor limit - needed by Sprint 6
+- [ ] Parent purchases: does a parent's purchase cover one linked child, all linked children, or only the parent (Product Bible Chapter 15, question 18) - needed by Sprint 2
+- [ ] Grade 11 sign-ups: allow Class of 2027 learners who are still in Grade 11 the full experience (Product Bible Chapter 15, question 13) - needed by Sprint 2
 - Full list of open questions: `docs/product-bible.md` Chapter 15
 
 ---
@@ -117,5 +119,5 @@ Newest first. One entry per run: date, sprint, what was done, what QA found, wha
 ### 2026-11-10 - Sprint 0 (IN REVIEW)
 
 - Done: wrote `docs/product-bible.md` (14 chapters plus Chapter 15, Open questions for Didi), committed chapter by chapter. Added a "Product context" section to `docs/decisions.md` with Didi's audience, book, website, affiliate, visual and timing facts. Prettier and the copy check (no ampersands, no em or en dashes) pass on the docs and commit messages.
-- QA: not yet run. The `ws12-qa` review could not start from the Product Lead session (the nested agent session failed to authenticate). No boxes are ticked, because only QA can tick them. Next run: run `ws12-qa` on the Product Bible first.
+- QA round 1 (run by the coordinator): FAIL on boxes 4, 6 and 10, PASS on boxes 1, 2, 3, 5, 7, 8 and 9. Copy rules and Prettier passed. Findings: minors could self-declare as adults; RLS undefined for several tables; website sign-up stored minors' emails before consent; unmarked "proposed sprint" items; missing columns and tables; AI quiz generation and first name sent to the model; screen state gaps; checkout not server-side; no subject percentage formula; Next Win inconsistency. All 12 findings fixed in the Product Bible and sent back to QA for round 2. No boxes ticked.
 - Blocked: nothing in Sprint 0 is blocked by Didi. Sprint 1 can start once QA passes Sprint 0. New items added to "Needs from Didi" (manuscript, core IP, questionnaires, consent flow, sprint scope, unlock rule, support lines, AI provider).
