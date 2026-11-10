@@ -2,7 +2,7 @@
 
 Updated by `ws12-product-lead` after every run. A sprint is DONE only when `ws12-qa` signs off every box.
 
-**Current sprint:** Sprint 0
+**Current sprint:** Sprint 1
 **Sprint length:** 1 week
 **Status key:** TODO / IN PROGRESS / IN REVIEW / DONE / BLOCKED
 
@@ -28,20 +28,20 @@ Updated by `ws12-product-lead` after every run. A sprint is DONE only when `ws12
 
 ---
 
-## Sprint 0 - Product Bible (status: IN REVIEW)
+## Sprint 0 - Product Bible (status: DONE)
 
 Write `docs/product-bible.md` covering the 14 chapters in `docs/build-plan.md`.
 
-- [ ] Learner persona, parent persona, teacher persona (South African context)
-- [ ] App architecture and how the website and app share one login
-- [ ] Screen-by-screen UX for every screen in the brief, each answering "what does the learner do next?"
-- [ ] Feature priorities (must / should / later) mapped to sprints
-- [ ] User journeys: learner signup, parent buys and invites, learner adds parent, daily study loop
-- [ ] Database architecture (tables, relations, RLS approach)
-- [ ] AI agent architecture and the content-to-knowledge plan for Melvin's book
-- [ ] Monetisation (tiers), analytics and KPIs, admin, school portal, parent portal, app store plan
-- [ ] Open questions listed for Didi
-- [ ] QA sign-off: matches brief and decisions, copy rules followed
+- [x] Learner persona, parent persona, teacher persona (South African context)
+- [x] App architecture and how the website and app share one login
+- [x] Screen-by-screen UX for every screen in the brief, each answering "what does the learner do next?"
+- [x] Feature priorities (must / should / later) mapped to sprints
+- [x] User journeys: learner signup, parent buys and invites, learner adds parent, daily study loop
+- [x] Database architecture (tables, relations, RLS approach)
+- [x] AI agent architecture and the content-to-knowledge plan for Melvin's book
+- [x] Monetisation (tiers), analytics and KPIs, admin, school portal, parent portal, app store plan
+- [x] Open questions listed for Didi
+- [x] QA sign-off: matches brief and decisions, copy rules followed
 
 ## Sprint 1 - Foundation (status: TODO)
 
@@ -53,6 +53,10 @@ Write `docs/product-bible.md` covering the 14 chapters in `docs/build-plan.md`.
 - [ ] i18n layer with English and Afrikaans
 - [ ] Demo mode with seed learner Thabo Mokoena, clearly labelled as demo
 - [ ] CI: build, lint, type check and tests pass
+- [ ] Block client writes to `profiles.is_demo` in the migration (server-only) (Sprint 0 QA carry-over)
+- [ ] `give_consent()` switches an existing pending parent link to active; unique constraint on `parent_links` (`learner_id`, `parent_id`) (Sprint 0 QA carry-over)
+- [x] Product Bible 3.3 wording aligned: language is saved before consent (Sprint 0 QA carry-over, doc edit)
+- [x] Product Bible 6.2 relations include `learner_preferences`, one row per learner (Sprint 0 QA carry-over, doc edit)
 - [ ] QA sign-off
 
 ## Sprint 2 - Identity, Library and Parents (status: TODO)
@@ -117,6 +121,12 @@ Verification note from Sprint 0 QA: confirm how Supabase handles Google name and
 ## Run log
 
 Newest first. One entry per run: date, sprint, what was done, what QA found, what is blocked.
+
+### 2026-11-10 - Sprint 0 (DONE)
+
+- QA round 3 on 0b9db4d: PASS on all 10 Sprint 0 boxes, no blocking findings. QA note: RLS and consent rules are signed off as design only and must be proven by Sprint 1 and 2 tests.
+- Sprint 0 boxes ticked, status DONE, Current sprint set to Sprint 1 (not started in this run).
+- Four QA carry-overs added to Sprint 1. The two doc edits (3.3 language before consent, 6.2 `learner_preferences` relation) were made in this run and ticked on the coordinator's instruction without a separate QA pass; QA can confirm them in the Sprint 1 review.
 
 ### 2026-11-10 - Sprint 0 (IN REVIEW)
 

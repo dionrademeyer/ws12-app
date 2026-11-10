@@ -235,7 +235,7 @@ Other roles: Parent home (Chapter 13), Admin (Chapter 11), School Portal (Chapte
 
 - **Purpose:** POPIA requires consent from a parent or guardian before we process a child's personal information beyond what is needed to ask for that consent.
 - **Shows (learner under 18):** "Before we start, a parent or guardian needs to say yes." Two options: "My parent already has a WS12 account" (enter their invite code) or "Send my parent a link" (parent's email, or cell number once an SMS provider is chosen, Chapter 15, question 24). Explains in one sentence what the parent will see (a weekly summary, not private chats or answers).
-- **Until consent is given (proposed):** the learner can complete onboarding and use the demo-style experience on the device, but nothing beyond the account email, age answer and parent contact is saved to the server, and the AI Tutor is off. When the parent consents, onboarding answers are saved. Every consent check (saving onboarding answers, the AI Tutor in 7.4) calls a `has_consent()` function that reads `age_declarations` and `parental_consents`. It never trusts a flag the client can edit.
+- **Until consent is given (proposed):** the learner can complete onboarding and use the demo-style experience on the device, but nothing beyond the account email, age answer, parent contact and app language is saved to the server (language is saved before consent so the app and the consent messages use it), and the AI Tutor is off. When the parent consents, onboarding answers are saved. Every consent check (saving onboarding answers, the AI Tutor in 7.4) calls a `has_consent()` function that reads `age_declarations` and `parental_consents`. It never trusts a flag the client can edit.
 - **Parent side:** a consent page that says who is asking, what is collected, why, and how to withdraw. Buttons "I give consent" and "This is not my child".
 - **States:** "Waiting for your parent" with "Resend" and "Change contact". The parent's contact is kept encrypted in `consent_contacts` only so that Resend works, and is deleted as soon as consent is given or the request expires (proposed: 30 days). Sending real messages to real parents needs Didi's approval before go-live.
 - **Next action:** Send my parent a link.
@@ -602,6 +602,7 @@ All tables live in the one Supabase Postgres database, in the `public` schema un
 ### 6.2 Relations (summary)
 
 - `profiles` 1 to 1 `auth.users`.
+- A learner has one `learner_preferences` row (study days, study time bands, career interests).
 - A learner has many `learner_subjects`, `goals`, `study_sessions`, `study_tasks`, `study_activity` rows, `lesson_progress` rows and `assessment_attempts`; one `streaks` row.
 - `parent_links` joins a parent profile and a learner profile (many to many: a learner can have two parents, a parent several children).
 - `content` is a tree: chapter, strategy, topic, lesson, activity, quiz. `lessons` adds weekly data to lesson nodes. `kb_chunks` belong to an approved `content` version.
