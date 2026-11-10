@@ -14,10 +14,19 @@ Updated by `ws12-product-lead` after every run. A sprint is DONE only when `ws12
 - [ ] Create the Supabase project (or approve the agents creating one) - needed by Sprint 1
 - [ ] Google OAuth client ID for sign-in - needed by Sprint 2
 - [ ] PayFast sandbox and Stripe test keys - needed by Sprint 2 (My Library purchases)
+- [ ] Book manuscript MLS 1 to 52 in English and Afrikaans (editable format, with lesson numbers) - needed before lessons load (Sprint 4) and for Tutor content (Sprint 6)
+- [ ] Core IP text from the book: DCA formula, DNA of a Successful Matriculant, Pencil story, Force Field Analysis - needed by Sprint 4
+- [ ] The five profiling questionnaires with items, scoring and result bands (EN and AF) - needed by Sprint 5
+- [ ] Approve the POPIA parental consent flow (Product Bible 3.3) - needed by Sprint 2
+- [ ] Approve adding Product Bible items to sprints (lesson card, Journey, Self-assessments, Parent home, Settings, Help, Admin) - see Product Bible Chapter 15, question 10
+- [ ] Lesson unlock rule and pre-season view for the Class of 2027 - needed by Sprint 3
+- [ ] Verified South African support lines for Help and the AI Tutor - needed by Sprint 2
+- [ ] AI model provider, budget and daily Tutor limit - needed by Sprint 6
+- Full list of open questions: `docs/product-bible.md` Chapter 15
 
 ---
 
-## Sprint 0 - Product Bible (status: TODO)
+## Sprint 0 - Product Bible (status: IN REVIEW)
 
 Write `docs/product-bible.md` covering the 14 chapters in `docs/build-plan.md`.
 
@@ -104,3 +113,9 @@ Write `docs/product-bible.md` covering the 14 chapters in `docs/build-plan.md`.
 ## Run log
 
 Newest first. One entry per run: date, sprint, what was done, what QA found, what is blocked.
+
+### 2026-11-10 - Sprint 0 (IN REVIEW)
+
+- Done: wrote `docs/product-bible.md` (14 chapters plus Chapter 15, Open questions for Didi), committed chapter by chapter. Added a "Product context" section to `docs/decisions.md` with Didi's audience, book, website, affiliate, visual and timing facts. Prettier and the copy check (no ampersands, no em or en dashes) pass on the docs and commit messages.
+- QA: not yet run. The `ws12-qa` review could not start from the Product Lead session (the nested agent session failed to authenticate). No boxes are ticked, because only QA can tick them. Next run: run `ws12-qa` on the Product Bible first.
+- Blocked: nothing in Sprint 0 is blocked by Didi. Sprint 1 can start once QA passes Sprint 0. New items added to "Needs from Didi" (manuscript, core IP, questionnaires, consent flow, sprint scope, unlock rule, support lines, AI provider).

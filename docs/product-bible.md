@@ -955,7 +955,7 @@ Each item is also tracked in "Needs from Didi" in `SPRINTS.md` where it blocks a
 7. **Lesson unlock rule:** calendar-aligned (default proposed: catch up to the current school week on sign-up, then one per Monday) or personal (one per 7 days from sign-up)?
 8. **Pre-season:** what do Class of 2027 learners see between November 2026 and the start of the school year? Default proposed: a preview of MLS 1 and the countdown.
 9. **Journey placement:** keep the five bottom tabs from the brief and reach the Journey from the Dashboard (default), or replace a tab with "Journey"?
-10. **Sprint scope:** approve adding boxes to `SPRINTS.md` for the Lesson Journey and Lesson screens (S4), Self-assessments (S5) and Parent home (S5).
+10. **Sprint scope:** approve adding boxes to `SPRINTS.md` for the This week's lesson card (S3), Lesson Journey and Lesson screens (S4), Self-assessments (S5), Parent home (S5), Settings and Help screens (S2) and the Admin dashboard (S5 to S7). These are in this Bible but not yet in `SPRINTS.md`.
 11. **Reference image:** the dashboard visual reference is still missing. Until it arrives, the September prototype palette is used. Confirm the mint and cream colour values.
 12. **Header:** confirm the avatar menu with no hamburger (current default).
 13. **Grade 11 sign-ups:** allow Grade 11 learners (Class of 2027 signing up in late 2026) with the full experience?
