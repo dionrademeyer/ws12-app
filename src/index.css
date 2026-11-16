@@ -1,0 +1,25 @@
+@import 'tailwindcss';
+
+@theme {
+  --color-navy: #10163f;
+  --color-indigo: #3b33c9;
+  --color-gold: #f9c22e;
+  --color-mist: #f4f5fb;
+  --font-sans:
+    system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif;
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-mist text-navy antialiased;
+  }
+
+  :focus-visible {
+    outline: 3px solid var(--color-indigo);
+    outline-offset: 2px;
+  }
+}
