@@ -599,6 +599,89 @@ as $$
 $$;
 
 -- ---------------------------------------------------------------------------
+-- Tier checks for lesson bodies (Product Bible 6.2 and 6.3 rule 5)
+-- ---------------------------------------------------------------------------
+
+-- Tiers in ascending order, so a person's highest entitlement can be compared to min_tier.
+create function public.tier_rank(p_tier text)
+returns smallint
+language sql
+immutable
+set search_path = ''
+as $$
+  select case p_tier
+    when 'free' then 0
+    when 'r99' then 1
+    when 'r199' then 2
+    when 'r349' then 3
+  end::smallint;
+$$;
+
+-- The caller's highest active entitlement, counting entitlements bought for them by a parent.
+-- Every account is at least free.
+create function public.my_tier_rank()
+returns smallint
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select coalesce(max(public.tier_rank(e.tier)), 0)::smallint
+  from public.entitlements e
+  where e.status = 'active'
+    and (select auth.uid()) in (e.user_id, e.granted_for_learner_id);
+$$;
+
+-- Whether the caller may read the body of a content row. The row must be approved, and the
+-- caller's tier must reach the highest min_tier of any lesson on the row or above it in the
+-- content tree, so an activity inside a paid lesson is gated with that lesson. The weekly
+-- unlock rule belongs here as one more condition once it is confirmed.
+create function public.can_read_content_body(p_content_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  with recursive content_chain (id, parent_id, depth) as (
+    select c.id, c.parent_id, 1
+    from public.content c
+    where c.id = p_content_id
+    union all
+    select c.id, c.parent_id, chain.depth + 1
+    from public.content c
+    join content_chain chain on c.id = chain.parent_id
+    where chain.depth < 10
+  )
+  select public.is_admin()
+    or (
+      exists (select 1 from public.content c where c.id = p_content_id and c.status = 'approved')
+      and coalesce(
+        (
+          select max(public.tier_rank(l.min_tier))
+          from public.lessons l
+          join content_chain chain on l.content_id = chain.id
+        ),
+        0
+      ) <= public.my_tier_rank()
+    );
+$$;
+
+-- Clients have no select on content.body_en and content.body_af; bodies are read here.
+-- A row the caller may not read returns no rows.
+create function public.content_body(p_content_id uuid)
+returns table (body_en text, body_af text)
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select c.body_en, c.body_af
+  from public.content c
+  where c.id = p_content_id and public.can_read_content_body(c.id);
+$$;
+
+-- ---------------------------------------------------------------------------
 -- profiles: sign-up trigger and column guards
 -- ---------------------------------------------------------------------------
 
@@ -691,6 +774,44 @@ $$;
 
 create trigger profiles_guard_insert before insert on public.profiles
   for each row execute function public.guard_profile_insert();
+
+-- ---------------------------------------------------------------------------
+-- assessment_attempts: a completed attempt is frozen (Product Bible 6.3)
+-- ---------------------------------------------------------------------------
+
+-- Answers are only writable while completed_at is null, so a client must never be able to
+-- reopen an attempt or change its result. Only shared_with_parent stays editable afterwards.
+create function public.guard_assessment_attempt_update()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+begin
+  if current_user not in ('authenticated', 'anon') then
+    return new;
+  end if;
+
+  if (new.id, new.learner_id, new.questionnaire_id, new.questionnaire_version, new.started_at)
+    is distinct from
+    (old.id, old.learner_id, old.questionnaire_id, old.questionnaire_version, old.started_at)
+  then
+    raise exception 'an assessment attempt cannot move to another learner or questionnaire'
+      using errcode = '42501';
+  end if;
+
+  if old.completed_at is not null
+    and (new.completed_at, new.score, new.band) is distinct from
+      (old.completed_at, old.score, old.band)
+  then
+    raise exception 'a completed assessment attempt cannot be changed' using errcode = '42501';
+  end if;
+
+  return new;
+end;
+$$;
+
+create trigger assessment_attempts_guard_update before update on public.assessment_attempts
+  for each row execute function public.guard_assessment_attempt_update();
 
 -- ---------------------------------------------------------------------------
 -- Sensitive flows (Product Bible 6.3 rule 10). Each checks auth.uid() and writes audit_log.
@@ -1273,9 +1394,12 @@ grant select, insert, update, delete on
   public.study_tasks,
   public.study_activity,
   public.lesson_progress,
-  public.worksheet_answers,
-  public.assessment_attempts
+  public.worksheet_answers
 to authenticated;
+
+grant select, insert, delete on public.assessment_attempts to authenticated;
+grant update (completed_at, score, band, shared_with_parent) on public.assessment_attempts
+  to authenticated;
 
 grant select, insert, update on public.assessment_answers to authenticated;
 
@@ -1290,8 +1414,25 @@ grant insert (user_id, event, props) on public.analytics_events to authenticated
 grant select on public.products to anon, authenticated;
 grant insert, update, delete on public.products, public.library_files to authenticated;
 
+-- Lesson bodies are gated by tier, so clients read them through content_body() only.
+grant select (
+  id,
+  kind,
+  parent_id,
+  slug,
+  title_en,
+  title_af,
+  status,
+  version,
+  approved_by,
+  approved_at,
+  source_ref,
+  created_at,
+  updated_at
+) on public.content to authenticated;
+grant insert, update, delete on public.content to authenticated;
+
 grant select, insert, update, delete on
-  public.content,
   public.tips,
   public.questionnaires,
   public.plan_templates,
@@ -1316,5 +1457,7 @@ grant execute on function
   public.withdraw_consent(uuid),
   public.accept_link(uuid),
   public.remove_link(uuid),
-  public.parent_learner_summary(uuid)
+  public.parent_learner_summary(uuid),
+  public.can_read_content_body(uuid),
+  public.content_body(uuid)
 to authenticated;
