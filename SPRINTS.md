@@ -43,7 +43,7 @@ Write `docs/product-bible.md` covering the 14 chapters in `docs/build-plan.md`.
 - [x] Open questions listed for Didi
 - [x] QA sign-off: matches brief and decisions, copy rules followed
 
-## Sprint 1 - Foundation (status: TODO)
+## Sprint 1 - Foundation (status: IN REVIEW)
 
 - [ ] Vite + React + TypeScript + Tailwind project, Prettier and ESLint
 - [ ] Folder structure separating UI, business logic, data, AI services, auth
@@ -58,6 +58,8 @@ Write `docs/product-bible.md` covering the 14 chapters in `docs/build-plan.md`.
 - [x] Product Bible 3.3 wording aligned: language is saved before consent (Sprint 0 QA carry-over, doc edit)
 - [x] Product Bible 6.2 relations include `learner_preferences`, one row per learner (Sprint 0 QA carry-over, doc edit)
 - [ ] QA sign-off
+
+Built on 2026-11-16 (commits 110af22, ca9d128, cb5b7cd, 528a3a3) and waiting for the `ws12-qa` review. QA should also confirm the two doc edits ticked from the Sprint 0 carry-overs. Known follow-ups for QA to judge: `create_invite()`, `redeem_invite()` and `claim_entitlements()` are left for Sprint 2 (parent linking and purchases); lesson unlock and `min_tier` checks on lesson bodies wait for the unlock rule (Needs from Didi); TypeScript types are not generated from the schema yet because that needs the Supabase project.
 
 ## Sprint 2 - Identity, Library and Parents (status: TODO)
 
@@ -121,6 +123,14 @@ Verification note from Sprint 0 QA: confirm how Supabase handles Google name and
 ## Run log
 
 Newest first. One entry per run: date, sprint, what was done, what QA found, what is blocked.
+
+### 2026-11-16 - Sprint 1 (IN REVIEW)
+
+- Built every Sprint 1 box: Vite, React, TypeScript and Tailwind scaffold with Prettier, ESLint and Vitest; folder structure with lint rules for the layers; Supabase client from environment variables with `.env.example` and no secrets; full schema migration with RLS on every table; app shell with bottom nav, sidebar and avatar menu (no hamburger); English and Afrikaans i18n; demo mode with Thabo Mokoena and a demo banner on every screen; GitHub Actions CI. Both code carry-overs are in the migration: `profiles.is_demo` is server-only, and `give_consent()` switches a pending link to active with a unique (`learner_id`, `parent_id`) constraint.
+- Proof: 30 database tests in PGlite (with a stub of the Supabase auth schema and roles) show a learner cannot read or change another learner's rows, a client cannot write `profiles.is_demo`, `give_consent()` activates a pending link, the unique constraint holds, and a minor without consent cannot save study data. 31 app tests cover the shell, avatar menu, language switch and demo mode with no Supabase settings. Format, copy check, lint, type check, tests and build all pass. Screens checked at 360, 768, 1024 and 1440 px with no horizontal overflow.
+- QA: not run. This run had no way to start the `ws12-qa` agent (no agent tool was available), so no Sprint 1 box is ticked. The specialist agents could not be started either; the product lead built the work directly. Next run: send all Sprint 1 boxes to `ws12-qa`, including the two Sprint 0 doc edits.
+- Blocked: nothing in Sprint 1. No Supabase project exists yet (Needs from Didi), so migrations are proven locally only and were not applied to any cloud project.
+- Notes: Afrikaans UI strings need a first-language review before launch (Product Bible 2.8). `npm audit` reports 7 moderate issues in development-only lint packages (typescript-eslint chain), none in the app bundle.
 
 ### 2026-11-10 - Sprint 0 (DONE)
 
