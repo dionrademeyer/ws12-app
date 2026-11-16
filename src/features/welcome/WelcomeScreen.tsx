@@ -10,7 +10,7 @@ export function WelcomeScreen() {
   const navigate = useNavigate()
 
   return (
-    <main className="flex min-h-dvh flex-col bg-gradient-to-b from-navy to-indigo px-5 py-8 text-white">
+    <main className="on-dark flex min-h-dvh flex-col bg-gradient-to-b from-navy to-indigo px-5 py-8 text-white">
       <div className="flex justify-end">
         <LanguageSwitch tone="dark" />
       </div>

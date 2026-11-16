@@ -15,7 +15,7 @@ export function DashboardScreen() {
   const { profile } = state
   return (
     <div className="flex flex-col gap-4">
-      <section className="rounded-3xl bg-gradient-to-br from-navy to-indigo p-6 text-white shadow-md">
+      <section className="on-dark rounded-3xl bg-gradient-to-br from-navy to-indigo p-6 text-white shadow-md">
         <h1 className="text-2xl font-bold">
           {t('dashboard.greeting', { name: profile.firstName })}
         </h1>

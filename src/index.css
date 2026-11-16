@@ -22,4 +22,12 @@
     outline: 3px solid var(--color-indigo);
     outline-offset: 2px;
   }
+
+  .on-dark :focus-visible {
+    outline-color: var(--color-gold);
+  }
+
+  .on-dark .on-light :focus-visible {
+    outline-color: var(--color-indigo);
+  }
 }

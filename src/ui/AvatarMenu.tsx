@@ -73,7 +73,7 @@ export function AvatarMenu({ initials, items, onLogout }: AvatarMenuProps) {
           role="menu"
           aria-label={t('a11y.accountMenu')}
           onKeyDown={onMenuKeyDown}
-          className="absolute right-0 z-30 mt-2 w-56 overflow-hidden rounded-2xl bg-white py-2 shadow-lg ring-1 ring-navy/10"
+          className="on-light absolute right-0 z-30 mt-2 w-56 overflow-hidden rounded-2xl bg-white py-2 shadow-lg ring-1 ring-navy/10"
         >
           {items.map((item) => (
             <li key={item.to} role="none">

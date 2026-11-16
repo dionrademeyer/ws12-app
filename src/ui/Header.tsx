@@ -11,7 +11,7 @@ interface HeaderProps {
 export function Header({ onBack, notificationsLink, avatar }: HeaderProps) {
   const { t } = useI18n()
   return (
-    <header className="bg-navy text-white">
+    <header className="on-dark bg-navy text-white">
       <div className="mx-auto grid h-16 max-w-6xl grid-cols-[3rem_1fr_auto] items-center gap-2 px-3">
         <div>
           {onBack && (
