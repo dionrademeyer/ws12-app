@@ -1,23 +1,27 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { resolveLanguage, type Language } from '../domain/language'
+import { defaultLanguage, isLanguage, type Language } from '../domain/language'
 import { I18nContext, type I18nValue } from './context'
 import { translate } from './messages'
 
 const storageKey = 'ws12.language'
 
-function readStoredLanguage(): Language {
+function readStoredLanguage(): Language | null {
   try {
-    return resolveLanguage(window.localStorage.getItem(storageKey))
+    const stored = window.localStorage.getItem(storageKey)
+    return isLanguage(stored) ? stored : null
   } catch {
-    return resolveLanguage()
+    return null
   }
 }
 
 export function I18nProvider({ children }: { children: ReactNode }) {
-  const [language, setLanguageState] = useState<Language>(readStoredLanguage)
+  const [stored] = useState(readStoredLanguage)
+  const [language, setLanguageState] = useState<Language>(stored ?? defaultLanguage)
+  const [choiceStored, setChoiceStored] = useState(stored !== null)
 
   const setLanguage = useCallback((next: Language) => {
     setLanguageState(next)
+    setChoiceStored(true)
     try {
       window.localStorage.setItem(storageKey, next)
     } catch {
@@ -30,9 +34,22 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     document.title = translate(language, 'app.shortName')
   }, [language])
 
+  const applyAccountLanguage = useCallback(
+    (next: Language) => {
+      if (!choiceStored) setLanguageState(next)
+    },
+    [choiceStored],
+  )
+
   const value = useMemo<I18nValue>(
-    () => ({ language, setLanguage, t: (key, params) => translate(language, key, params) }),
-    [language, setLanguage],
+    () => ({
+      language,
+      setLanguage,
+      choiceStored,
+      applyAccountLanguage,
+      t: (key, params) => translate(language, key, params),
+    }),
+    [language, setLanguage, choiceStored, applyAccountLanguage],
   )
 
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>

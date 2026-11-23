@@ -29,7 +29,7 @@ interface FieldErrors {
 }
 
 export function RegisterScreen() {
-  const { t } = useI18n()
+  const { t, language } = useI18n()
   const { mode, auth, authConfigured } = useSession()
   const navigate = useNavigate()
   const [params] = useSearchParams()
@@ -73,7 +73,12 @@ export function RegisterScreen() {
 
     setBusy('email')
     try {
-      const result = await auth.signUpWithEmail(email.trim(), password, absoluteUrl(callbackPath))
+      const result = await auth.signUpWithEmail(
+        email.trim(),
+        password,
+        absoluteUrl(callbackPath),
+        language,
+      )
       if (result.needsVerification) {
         navigate(verifyEmailPath, { state: { email: email.trim() } })
       } else {

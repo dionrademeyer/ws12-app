@@ -115,6 +115,7 @@ export interface AccountRepository {
   declareAge(isAdult: boolean): Promise<void>
   claimParentRole(): Promise<void>
   claimEntitlements(): Promise<number>
+  setLanguage(language: Language): Promise<void>
 }
 
 export interface ProfileRepository {

@@ -1,3 +1,4 @@
+import type { Language } from '../domain/language'
 import type { LearnerRepository } from './learner'
 
 export interface SessionUser {
@@ -21,7 +22,12 @@ export interface AuthService {
   onChange(listener: (user: SessionUser | null, event: AuthEvent) => void): () => void
   signInWithProvider(provider: OAuthProvider, redirectTo: string): Promise<void>
   signInWithEmail(email: string, password: string): Promise<void>
-  signUpWithEmail(email: string, password: string, redirectTo: string): Promise<SignUpResult>
+  signUpWithEmail(
+    email: string,
+    password: string,
+    redirectTo: string,
+    language: Language,
+  ): Promise<SignUpResult>
   resendVerification(email: string, redirectTo: string): Promise<void>
   sendPasswordReset(email: string, redirectTo: string): Promise<void>
   updatePassword(password: string): Promise<void>

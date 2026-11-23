@@ -7,6 +7,7 @@ import {
   nextAccountPath,
   onboardingPath,
 } from '../../auth/accountRouting'
+import { useSyncAccountLanguage } from '../../auth/useAccountLanguage'
 import { useAccountKey } from '../../auth/useAccountKey'
 import { useSession } from '../../auth/useSession'
 import {
@@ -35,6 +36,7 @@ export function AccountGateScreen() {
   const { repository, claimEntitlementsOnce } = useSession()
   const accountKey = useAccountKey()
   const navigate = useNavigate()
+  const syncLanguage = useSyncAccountLanguage()
   const [error, setError] = useState<GateError | null>(null)
   const [attempt, setAttempt] = useState(0)
 
@@ -42,6 +44,7 @@ export function AccountGateScreen() {
     if (!repository || !accountKey) return
     await claimEntitlementsOnce()
     let state = await repository.getAccountState()
+    syncLanguage(state, repository)
 
     const pendingAge = readPendingAge()
     if (state.isAdult === null && pendingAge) {
@@ -69,7 +72,7 @@ export function AccountGateScreen() {
     const path = nextAccountPath(state, returnTo)
     if (path === returnTo) writeReturnTo(null)
     navigate(path, { replace: true })
-  }, [repository, accountKey, claimEntitlementsOnce, navigate])
+  }, [repository, accountKey, claimEntitlementsOnce, navigate, syncLanguage])
 
   // Runs once per attempt, also under React strict mode, because declaring the age is one-off.
   const started = useRef<number | null>(null)

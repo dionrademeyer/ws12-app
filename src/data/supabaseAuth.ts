@@ -46,11 +46,11 @@ export function createSupabaseAuth(client: SupabaseClient): AuthService {
       raise(error)
     },
 
-    async signUpWithEmail(email, password, redirectTo) {
+    async signUpWithEmail(email, password, redirectTo, language) {
       const { data, error } = await client.auth.signUp({
         email,
         password,
-        options: { emailRedirectTo: redirectTo },
+        options: { emailRedirectTo: redirectTo, data: { language } },
       })
       raise(error)
       // With email confirmation on, an existing address comes back as a user with no identities.

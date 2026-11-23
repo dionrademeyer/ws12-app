@@ -77,12 +77,13 @@ describe('Supabase auth service', () => {
       'a@example.com',
       'secret12',
       'https://app/cb',
+      'af',
     )
     expect(result).toEqual({ needsVerification: true })
     expect(auth.signUp).toHaveBeenCalledWith({
       email: 'a@example.com',
       password: 'secret12',
-      options: { emailRedirectTo: 'https://app/cb' },
+      options: { emailRedirectTo: 'https://app/cb', data: { language: 'af' } },
     })
   })
 
@@ -94,7 +95,7 @@ describe('Supabase auth service', () => {
       })),
     })
     await expect(
-      createSupabaseAuth(client).signUpWithEmail('a@example.com', 'secret12', 'x'),
+      createSupabaseAuth(client).signUpWithEmail('a@example.com', 'secret12', 'x', 'en'),
     ).rejects.toMatchObject({ code: 'email_taken' })
   })
 

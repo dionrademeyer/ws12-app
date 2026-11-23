@@ -147,6 +147,7 @@ describe('register', () => {
       'learner@example.com',
       'secret123',
       `${window.location.origin}/auth/callback`,
+      'en',
     )
     expect(window.localStorage.getItem('ws12.pendingAge')).toBe('minor')
   })

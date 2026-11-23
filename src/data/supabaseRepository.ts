@@ -211,6 +211,7 @@ export function createSupabaseRepository(
     declareAge: (isAdult) => rpc<void>('declare_age', { p_is_adult: isAdult }),
     claimParentRole: () => rpc<void>('claim_parent_role'),
     claimEntitlements: async () => (await rpc<number | null>('claim_entitlements')) ?? 0,
+    setLanguage: (language) => rpc<void>('set_language', { p_language: language }),
 
     getProfile,
     updateProfile,

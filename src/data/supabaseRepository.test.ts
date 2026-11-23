@@ -97,6 +97,7 @@ describe('Supabase repository', () => {
     await repository.declareAge(false)
     await repository.claimParentRole()
     expect(await repository.claimEntitlements()).toBe(2)
+    await repository.setLanguage('af')
     expect(await repository.createInvite('parent_to_learner')).toEqual({
       code: 'ABCD2345',
       expiresAt: '2026-12-01',
@@ -125,6 +126,7 @@ describe('Supabase repository', () => {
       ['declare_age', { p_is_adult: false }],
       ['claim_parent_role', undefined],
       ['claim_entitlements', undefined],
+      ['set_language', { p_language: 'af' }],
       ['create_invite', { p_kind: 'parent_to_learner' }],
       ['redeem_invite', { p_code: 'ABCD2345' }],
       ['accept_link', { p_link_id: 'link-9' }],

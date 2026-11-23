@@ -25,6 +25,7 @@ export function createDemoRepository(): LearnerRepository {
     declareAge: async () => undefined,
     claimParentRole: async () => undefined,
     claimEntitlements: async () => 0,
+    setLanguage: async () => undefined,
 
     getProfile: async () => structuredClone(profile),
 
