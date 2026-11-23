@@ -9,9 +9,11 @@ import {
   AccountGateScreen,
   AgeScreen,
   AuthCallbackScreen,
+  ConsentScreen,
   ForgotPasswordScreen,
   NotFoundScreen,
   NotificationsScreen,
+  ParentConsentScreen,
   ProfileScreen,
   RegisterScreen,
   ResetPasswordScreen,
@@ -32,6 +34,7 @@ export const routes: RouteObject[] = [
       { path: '/forgot-password', element: <ForgotPasswordScreen /> },
       { path: '/reset-password', element: <ResetPasswordScreen /> },
       { path: '/auth/callback', element: <AuthCallbackScreen /> },
+      { path: '/consent/:consentId', element: <ParentConsentScreen /> },
     ],
   },
   {
@@ -42,6 +45,7 @@ export const routes: RouteObject[] = [
         children: [
           { path: '/start', element: <AccountGateScreen /> },
           { path: '/start/age', element: <AgeScreen /> },
+          { path: '/start/consent', element: <ConsentScreen /> },
         ],
       },
       {

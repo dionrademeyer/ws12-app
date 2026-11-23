@@ -51,3 +51,13 @@ export const AccountGateScreen = lazy(() =>
 export const AgeScreen = lazy(() =>
   import('../features/start/AgeScreen').then((m) => ({ default: m.AgeScreen })),
 )
+
+export const ConsentScreen = lazy(() =>
+  import('../features/consent/ConsentScreen').then((m) => ({ default: m.ConsentScreen })),
+)
+
+export const ParentConsentScreen = lazy(() =>
+  import('../features/consent/ParentConsentScreen').then((m) => ({
+    default: m.ParentConsentScreen,
+  })),
+)
