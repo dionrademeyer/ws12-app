@@ -17,3 +17,37 @@ export const NotificationsScreen = lazy(() =>
 export const NotFoundScreen = lazy(() =>
   import('../features/not-found/NotFoundScreen').then((m) => ({ default: m.NotFoundScreen })),
 )
+
+export const SignInScreen = lazy(() =>
+  import('../features/auth/SignInScreen').then((m) => ({ default: m.SignInScreen })),
+)
+
+export const RegisterScreen = lazy(() =>
+  import('../features/register/RegisterScreen').then((m) => ({ default: m.RegisterScreen })),
+)
+
+export const VerifyEmailScreen = lazy(() =>
+  import('../features/auth/VerifyEmailScreen').then((m) => ({ default: m.VerifyEmailScreen })),
+)
+
+export const ForgotPasswordScreen = lazy(() =>
+  import('../features/auth/ForgotPasswordScreen').then((m) => ({
+    default: m.ForgotPasswordScreen,
+  })),
+)
+
+export const ResetPasswordScreen = lazy(() =>
+  import('../features/auth/ResetPasswordScreen').then((m) => ({ default: m.ResetPasswordScreen })),
+)
+
+export const AuthCallbackScreen = lazy(() =>
+  import('../features/auth/AuthCallbackScreen').then((m) => ({ default: m.AuthCallbackScreen })),
+)
+
+export const AccountGateScreen = lazy(() =>
+  import('../features/start/AccountGateScreen').then((m) => ({ default: m.AccountGateScreen })),
+)
+
+export const AgeScreen = lazy(() =>
+  import('../features/start/AgeScreen').then((m) => ({ default: m.AgeScreen })),
+)

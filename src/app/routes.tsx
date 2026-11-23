@@ -2,18 +2,48 @@ import { Navigate, type RouteObject } from 'react-router-dom'
 import { RequireSession } from '../auth/RequireSession'
 import { DashboardScreen } from '../features/dashboard/DashboardScreen'
 import { PlannedScreen } from '../features/planned/PlannedScreen'
-import { RegisterScreen } from '../features/register/RegisterScreen'
 import { WelcomeScreen } from '../features/welcome/WelcomeScreen'
+import { FullPage } from '../ui/FullPage'
 import { AppShell } from './AppShell'
-import { NotFoundScreen, NotificationsScreen, ProfileScreen, SettingsScreen } from './lazyScreens'
+import {
+  AccountGateScreen,
+  AgeScreen,
+  AuthCallbackScreen,
+  ForgotPasswordScreen,
+  NotFoundScreen,
+  NotificationsScreen,
+  ProfileScreen,
+  RegisterScreen,
+  ResetPasswordScreen,
+  SettingsScreen,
+  SignInScreen,
+  VerifyEmailScreen,
+} from './lazyScreens'
 import { dashboardPath } from './navigation'
 
 export const routes: RouteObject[] = [
   { path: '/', element: <WelcomeScreen /> },
-  { path: '/register', element: <RegisterScreen /> },
+  {
+    element: <FullPage />,
+    children: [
+      { path: '/signin', element: <SignInScreen /> },
+      { path: '/register', element: <RegisterScreen /> },
+      { path: '/verify-email', element: <VerifyEmailScreen /> },
+      { path: '/forgot-password', element: <ForgotPasswordScreen /> },
+      { path: '/reset-password', element: <ResetPasswordScreen /> },
+      { path: '/auth/callback', element: <AuthCallbackScreen /> },
+    ],
+  },
   {
     element: <RequireSession />,
     children: [
+      {
+        element: <FullPage />,
+        children: [
+          { path: '/start', element: <AccountGateScreen /> },
+          { path: '/start/age', element: <AgeScreen /> },
+        ],
+      },
       {
         path: '/app',
         element: <AppShell />,
