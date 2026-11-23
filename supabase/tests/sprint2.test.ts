@@ -697,6 +697,8 @@ describe('learner isolation in the new functions and tables', () => {
       'select public.claim_entitlements()',
       'select * from public.my_library()',
       'select public.library_download_path(gen_random_uuid())',
+      "select public.set_language('af')",
+      `select public.update_profile('{"first_name": "Thabo"}'::jsonb)`,
     ]
     for (const sql of calls) {
       await expect(
@@ -714,6 +716,14 @@ describe('learner isolation in the new functions and tables', () => {
       'select public.run_housekeeping()',
       'select public.has_consent_for(gen_random_uuid())',
       'select public.tier_rank_for(gen_random_uuid())',
+      `select public.profile_first_name('"Thabo"'::jsonb)`,
+      "select public.profile_grade('12'::jsonb)",
+      'select public.profile_school_id(null::jsonb)',
+      `select public.profile_province('"GP"'::jsonb)`,
+      "select * from public.profile_subjects('[]'::jsonb)",
+      "select * from public.profile_exam_dates('[]'::jsonb)",
+      "select public.replace_learner_subjects(gen_random_uuid(), '{}', '{}')",
+      "select public.replace_learner_exam_dates(gen_random_uuid(), '{}', '{}')",
     ]
     for (const sql of calls) {
       await expect(rows(learner, sql), sql).rejects.toThrow(/permission denied/)
@@ -891,6 +901,418 @@ describe('withdraw_consent()', () => {
       call(learner, "update public.profiles set first_name = 'Lebo' where id = $1", [learner]),
       'consent_required',
     )
+  })
+})
+
+describe('remove_link() on a link that consent created', () => {
+  const onboardingAnswers = {
+    first_name: 'Lebo',
+    grade: 12,
+    school_id: null,
+    school_name_other: null,
+    province: 'GP',
+    subjects: [],
+    exam_dates: [],
+    study_days: [],
+    study_bands: [],
+    goal: null,
+    career_interests: [],
+  }
+
+  async function consentedPair(label: string) {
+    const parentEmail = email(`${label}.parent`)
+    const learner = await createMinorLearner(db, email(`${label}.learner`))
+    const parent = await createParent(db, parentEmail)
+    const consentId = await requestConsent(learner, parentEmail)
+    const linkId = await giveConsent(parent, consentId)
+    return { learner, parent, consentId, linkId }
+  }
+
+  it('gives the parent the consent id of an active consent link, and not the learner', async () => {
+    const { learner, parent, consentId, linkId } = await consentedPair('family.consent')
+    expect(await family(parent)).toEqual([
+      expect.objectContaining({ link_id: linkId, status: 'active', consent_id: consentId }),
+    ])
+    expect(await family(learner)).toEqual([
+      expect.objectContaining({ link_id: linkId, status: 'active', consent_id: null }),
+    ])
+  })
+
+  it('withdraws the consent when the parent removes the link, so processing stops', async () => {
+    const { learner, parent, consentId, linkId } = await consentedPair('remove.withdraws')
+    expect((await accountState(learner))?.consent_status).toBe('given')
+
+    await call(parent, 'select public.remove_link($1)', [linkId])
+
+    expect(await consentRow(consentId)).toEqual({ status: 'withdrawn', contacts: 0 })
+    expect(
+      await serverValue<boolean>(
+        'select withdrawn_at is not null as value from public.parental_consents where id = $1',
+        [consentId],
+      ),
+    ).toBe(true)
+    expect((await accountState(learner))?.consent_status).toBe('withdrawn')
+    expect(await family(parent)).toEqual([])
+    expect(await family(learner)).toEqual([])
+    await expectCode(
+      call(learner, 'select public.save_onboarding($1::jsonb)', [
+        JSON.stringify(onboardingAnswers),
+      ]),
+      'consent_required',
+    )
+    await expectCode(
+      call(learner, "update public.profiles set first_name = 'Lebo' where id = $1", [learner]),
+      'consent_required',
+    )
+    await expectCode(call(parent, 'select public.withdraw_consent($1)', [consentId]), 'not_found')
+    expect(
+      await serverValue<number>(
+        `select count(*)::int as value from public.audit_log
+         where action = 'withdraw_consent' and target = $1`,
+        [consentId],
+      ),
+    ).toBe(1)
+  })
+
+  it('lets the parent withdraw consent separately with the consent id from my_family', async () => {
+    const { learner, parent, linkId } = await consentedPair('family.withdraw')
+    const [row] = await family(parent)
+    await call(parent, 'select public.withdraw_consent($1)', [row!.consent_id])
+
+    expect((await accountState(learner))?.consent_status).toBe('withdrawn')
+    expect(
+      await serverValue<string>('select status as value from public.parent_links where id = $1', [
+        linkId,
+      ]),
+    ).toBe('removed')
+  })
+
+  it('lets only the consenting parent call withdraw_consent', async () => {
+    const { learner, consentId } = await consentedPair('withdraw.who')
+    const otherParent = await createParent(db, email('withdraw.who.other'))
+    await expectCode(call(learner, 'select public.withdraw_consent($1)', [consentId]), 'not_found')
+    await expectCode(
+      call(otherParent, 'select public.withdraw_consent($1)', [consentId]),
+      'not_found',
+    )
+    await expect(
+      asAnon(db, (tx) => tx.query('select public.withdraw_consent($1)', [consentId])),
+    ).rejects.toThrow(/permission denied/)
+    expect((await consentRow(consentId))?.status).toBe('given')
+  })
+
+  it('keeps the consent of a second parent who did not remove their link', async () => {
+    const { learner, parent, consentId, linkId } = await consentedPair('two.parents')
+    const secondEmail = email('two.parents.second')
+    const second = await createParent(db, secondEmail)
+    const secondConsent = await requestConsent(learner, secondEmail)
+    await giveConsent(second, secondConsent)
+
+    await call(parent, 'select public.remove_link($1)', [linkId])
+
+    expect((await consentRow(consentId))?.status).toBe('withdrawn')
+    expect((await consentRow(secondConsent))?.status).toBe('given')
+    expect((await accountState(learner))?.consent_status).toBe('given')
+  })
+
+  it('leaves the consent in place when the learner removes the link', async () => {
+    const { learner, consentId, linkId } = await consentedPair('learner.removes')
+    await call(learner, 'select public.remove_link($1)', [linkId])
+    expect((await consentRow(consentId))?.status).toBe('given')
+    expect((await accountState(learner))?.consent_status).toBe('given')
+  })
+
+  it('closes a consent request waiting on a removed link, so it cannot relink', async () => {
+    const parent = await createParent(db, email('pending.removed.parent'))
+    const minor = await createMinorLearner(db, email('pending.removed.learner'))
+    const { link_id } = await redeem(minor, (await createInvite(parent, 'parent_to_learner')).code)
+    const [row] = await family(parent)
+    const consentId = row!.consent_id!
+
+    await call(minor, 'select public.remove_link($1)', [link_id])
+
+    expect(await consentRow(consentId)).toEqual({ status: 'declined', contacts: 0 })
+    await expectCode(giveConsent(parent, consentId), 'not_allowed')
+    expect(
+      await serverValue<string>('select status as value from public.parent_links where id = $1', [
+        link_id,
+      ]),
+    ).toBe('removed')
+    expect((await accountState(minor))?.consent_status).toBe('none')
+  })
+
+  it('refuses a person who is not on the link', async () => {
+    const { consentId, linkId } = await consentedPair('remove.stranger')
+    const stranger = await createParent(db, email('remove.stranger.other'))
+    await expectCode(call(stranger, 'select public.remove_link($1)', [linkId]), 'not_found')
+    expect((await consentRow(consentId))?.status).toBe('given')
+  })
+})
+
+describe('the app language', () => {
+  async function signUpWith(metadata: unknown): Promise<string> {
+    const result = await db.query<{ id: string }>(
+      `insert into auth.users (email, email_confirmed_at, raw_user_meta_data)
+       values ($1, now(), $2) returning id`,
+      [email('language'), JSON.stringify(metadata)],
+    )
+    return result.rows[0]!.id
+  }
+
+  async function languageOf(userId: string) {
+    return serverValue<string>('select language as value from public.profiles where id = $1', [
+      userId,
+    ])
+  }
+
+  it.each([
+    ['en', { language: 'en' }, 'en'],
+    ['af', { language: 'af' }, 'af'],
+  ])('stores %s from sign-up metadata', async (_label, metadata, expected) => {
+    expect(await languageOf(await signUpWith(metadata))).toBe(expected)
+  })
+
+  it.each([
+    ['no language', {}],
+    ['an unknown language', { language: 'fr' }],
+    ['a code in capitals', { language: 'AF' }],
+    ['a code with spaces', { language: ' af' }],
+    ['a number', { language: 7 }],
+    ['an array', { language: ['af'] }],
+    ['JSON null', { language: null }],
+  ])('stores en for %s', async (_label, metadata) => {
+    expect(await languageOf(await signUpWith(metadata))).toBe('en')
+  })
+
+  it('lets a minor save the language before consent', async () => {
+    const minor = await createMinorLearner(db, email('language.minor'))
+    expect((await accountState(minor))?.consent_status).toBe('none')
+
+    await call(minor, 'select public.set_language($1)', ['af'])
+    expect((await accountState(minor))?.language).toBe('af')
+    await call(minor, 'select public.set_language($1)', ['en'])
+    expect((await accountState(minor))?.language).toBe('en')
+  })
+
+  it.each([['fr'], ['AF'], [' af'], [''], [null]])(
+    'refuses %j and keeps the saved language',
+    async (value) => {
+      const learner = await createUser(db, email('language.invalid'))
+      await call(learner, 'select public.set_language($1)', ['af'])
+      await expectCode(call(learner, 'select public.set_language($1)', [value]), 'invalid_input')
+      expect(await languageOf(learner)).toBe('af')
+    },
+  )
+
+  it("changes only the caller's own language", async () => {
+    const first = await createUser(db, email('language.first'))
+    const second = await createUser(db, email('language.second'))
+    await call(first, 'select public.set_language($1)', ['af'])
+    expect(await languageOf(first)).toBe('af')
+    expect(await languageOf(second)).toBe('en')
+  })
+})
+
+describe('update_profile()', () => {
+  let learner: string
+  let schoolId: string
+
+  const update = (userId: string, value: unknown) =>
+    call(userId, 'select public.update_profile($1::jsonb)', [JSON.stringify(value)])
+
+  async function snapshot(userId: string) {
+    const profile = await db.query<Record<string, unknown>>(
+      `select first_name, grade, school_id, school_name_other, province, language,
+         onboarding_step
+       from public.profiles where id = $1`,
+      [userId],
+    )
+    const subjects = await db.query(
+      `select s.code, ls.target_mark from public.learner_subjects ls
+       join public.subjects s on s.id = ls.subject_id where ls.learner_id = $1 order by s.code`,
+      [userId],
+    )
+    const exams = await db.query(
+      `select kind, to_char(starts_on, 'YYYY-MM-DD') as date from public.learner_exam_dates
+       where learner_id = $1 order by kind`,
+      [userId],
+    )
+    return { profile: profile.rows[0], subjects: subjects.rows, exams: exams.rows }
+  }
+
+  beforeAll(async () => {
+    learner = await createAdultLearner(db, email('update.profile'))
+    const result = await db.query<{ id: string }>(
+      "insert into public.schools (name, province) values ('Update High', 'WC') returning id",
+    )
+    schoolId = result.rows[0]!.id
+    await update(learner, {
+      first_name: 'Lerato',
+      grade: 12,
+      province: 'GP',
+      school_name_other: 'Hillside High',
+      subjects: [{ code: 'MATH', target_mark: 70 }],
+      exam_dates: [
+        { kind: 'trial', date: '2027-08-23' },
+        { kind: 'final', date: '2027-10-25' },
+      ],
+    })
+  })
+
+  it('saves every field it covers', async () => {
+    expect(await snapshot(learner)).toEqual({
+      profile: {
+        first_name: 'Lerato',
+        grade: 12,
+        school_id: null,
+        school_name_other: 'Hillside High',
+        province: 'GP',
+        language: 'en',
+        onboarding_step: 0,
+      },
+      subjects: [{ code: 'MATH', target_mark: 70 }],
+      exams: [
+        { kind: 'final', date: '2027-10-25' },
+        { kind: 'trial', date: '2027-08-23' },
+      ],
+    })
+  })
+
+  it('changes only the keys that are sent', async () => {
+    const before = await snapshot(learner)
+    await update(learner, { first_name: ' Lebo ' })
+    expect(await snapshot(learner)).toEqual({
+      ...before,
+      profile: { ...before.profile, first_name: 'Lebo' },
+    })
+    await update(learner, { first_name: 'Lerato' })
+  })
+
+  it('treats the school as one choice: a listed school clears the unlisted name', async () => {
+    await update(learner, { school_id: schoolId })
+    expect((await snapshot(learner)).profile).toMatchObject({
+      school_id: schoolId,
+      school_name_other: null,
+    })
+    await update(learner, { school_name_other: 'Hillside High' })
+    expect((await snapshot(learner)).profile).toMatchObject({
+      school_id: null,
+      school_name_other: 'Hillside High',
+    })
+  })
+
+  it('replaces the whole subject and exam date lists', async () => {
+    await update(learner, {
+      subjects: [
+        { code: 'PHSC', target_mark: 65 },
+        { code: 'LO', target_mark: null },
+      ],
+      exam_dates: [{ kind: 'final', date: '2027-10-25' }],
+    })
+    const result = await snapshot(learner)
+    expect(result.subjects).toEqual([
+      { code: 'LO', target_mark: null },
+      { code: 'PHSC', target_mark: 65 },
+    ])
+    expect(result.exams).toEqual([{ kind: 'final', date: '2027-10-25' }])
+  })
+
+  it('needs consent and changes nothing for a minor who is waiting', async () => {
+    const minor = await createMinorLearner(db, email('update.minor'))
+    const before = await snapshot(minor)
+    await expectCode(update(minor, { first_name: 'Lebo' }), 'consent_required')
+    expect(await snapshot(minor)).toEqual(before)
+  })
+
+  it("changes only the caller's own profile", async () => {
+    const other = await createAdultLearner(db, email('update.other'))
+    const before = await snapshot(learner)
+    await update(other, { first_name: 'Sipho', province: 'KZN' })
+    expect(await snapshot(learner)).toEqual(before)
+    expect((await snapshot(other)).profile).toMatchObject({ first_name: 'Sipho', province: 'KZN' })
+  })
+
+  const invalid: [string, unknown][] = [
+    ['not an object', ['Lerato']],
+    ['an empty object', {}],
+    ['an unknown key', { surname: 'Mokoena' }],
+    ['a key that only onboarding saves', { study_days: ['mon'] }],
+    ['the language', { language: 'af' }],
+    ['a blank first name', { first_name: '   ' }],
+    ['a null first name', { first_name: null }],
+    ['a first name over 60 characters', { first_name: 'A'.repeat(61) }],
+    ['a control character in the name', { first_name: 'Le\u0007rato' }],
+    ['grade 10', { grade: 10 }],
+    ['grade as text', { grade: '12' }],
+    ['a null grade', { grade: null }],
+    ['an unknown school', { school_id: '00000000-0000-4000-8000-000000000000' }],
+    ['a school id that is not a uuid', { school_id: 'school-1' }],
+    ['both a school and an unlisted school', { school_name_other: 'Other High' }],
+    ['an unlisted school over 120 characters', { school_name_other: 'S'.repeat(121) }],
+    ['a province name instead of a code', { province: 'Gauteng' }],
+    ['a province in lower case', { province: 'gp' }],
+    ['a null province', { province: null }],
+    ['subjects that are not a list', { subjects: 'MATH' }],
+    ['an unknown subject', { subjects: [{ code: 'XYZ', target_mark: 50 }] }],
+    [
+      'a duplicate subject',
+      {
+        subjects: [
+          { code: 'MATH', target_mark: 50 },
+          { code: 'MATH', target_mark: 60 },
+        ],
+      },
+    ],
+    ['a target over 100', { subjects: [{ code: 'MATH', target_mark: 101 }] }],
+    ['a fractional target', { subjects: [{ code: 'MATH', target_mark: 70.5 }] }],
+    ['an unknown exam kind', { exam_dates: [{ kind: 'mock', date: '2027-08-23' }] }],
+    ['an impossible date', { exam_dates: [{ kind: 'trial', date: '2027-02-30' }] }],
+    [
+      'a trial after the final',
+      {
+        exam_dates: [
+          { kind: 'trial', date: '2027-11-01' },
+          { kind: 'final', date: '2027-10-25' },
+        ],
+      },
+    ],
+    [
+      'a trial on the same day as the final',
+      {
+        exam_dates: [
+          { kind: 'trial', date: '2027-10-25' },
+          { kind: 'final', date: '2027-10-25' },
+        ],
+      },
+    ],
+    ['a valid name with a wrong subject', { first_name: 'Zola', subjects: [{ code: 'XYZ' }] }],
+    ['a valid name with a wrong province', { first_name: 'Zola', province: 'XX' }],
+  ]
+
+  it.each(invalid)('refuses %s and changes nothing', async (label, value) => {
+    const before = await snapshot(learner)
+    const withSchool =
+      label === 'both a school and an unlisted school'
+        ? { ...(value as Record<string, unknown>), school_id: schoolId }
+        : value
+    await expectCode(update(learner, withSchool), 'invalid_input')
+    expect(await snapshot(learner)).toEqual(before)
+  })
+})
+
+describe('profiles.province', () => {
+  it('accepts the nine province codes and refuses anything else, even from the server', async () => {
+    const learner = await createAdultLearner(db, email('province.check'))
+    for (const code of ['EC', 'FS', 'GP', 'KZN', 'LP', 'MP', 'NC', 'NW', 'WC']) {
+      await call(learner, 'update public.profiles set province = $2 where id = $1', [learner, code])
+    }
+    await expect(
+      call(learner, "update public.profiles set province = 'Gauteng' where id = $1", [learner]),
+    ).rejects.toThrow(/profiles_province_check/)
+    await expect(
+      db.query("update public.profiles set province = 'gp' where id = $1", [learner]),
+    ).rejects.toThrow(/profiles_province_check/)
+    await call(learner, 'update public.profiles set province = null where id = $1', [learner])
   })
 })
 

@@ -608,10 +608,11 @@ describe('give_consent()', () => {
       const link = await tx.query<{ id: string }>('select id from public.parent_links')
       await tx.query('select public.remove_link($1)', [link.rows[0]!.id])
     })
-    await asUser(db, parent, async (tx) => {
-      const consent = await tx.query<{ id: string }>('select id from public.parental_consents')
-      await tx.query('select public.withdraw_consent($1)', [consent.rows[0]!.id])
-    })
+    const consents = await db.query<{ status: string }>(
+      'select status from public.parental_consents where id = $1',
+      [first],
+    )
+    expect(consents.rows).toEqual([{ status: 'withdrawn' }])
 
     const second = await requestConsent(learner, 'parent.twice@example.test')
     await asUser(db, parent, (tx) => tx.query('select public.give_consent($1)', [second]))
@@ -1309,6 +1310,8 @@ describe('client privileges', () => {
     'remove_link(uuid)',
     'request_consent(text,text)',
     'save_onboarding(jsonb)',
+    'set_language(text)',
+    'update_profile(jsonb)',
     'withdraw_consent(uuid)',
   ].map((signature) => `authenticated EXECUTE ${signature}`)
 

@@ -38,6 +38,10 @@ Set these as Supabase secrets only (`supabase secrets set NAME=value`). Never co
 
 The `create-checkout` function (later sprint) must send what the webhooks expect: for PayFast, our reference in `m_payment_id`, the product code in `custom_str1` and the buyer email in `email_address`; for Stripe, the product code in the Checkout Session metadata as `product_code`, with the currency set to ZAR.
 
+## Database function privileges
+
+Supabase gives `anon` and `authenticated` execute on every new database function by default. Every migration that creates a function must revoke it from `public`, `anon` and `authenticated` (see the end of `supabase/migrations/20261123000200_consent_language_profile.sql`), then grant it to `authenticated` only when the app calls it, or to `service_role` only when an edge function calls it with the service role key. A function replaced with `create or replace` keeps its privileges. Add every grant to the expected list in `supabase/tests/rls.test.ts`, which fails on any grant that is not listed.
+
 ## Things to confirm on the real project
 
 - PayFast's current notification source ranges (`PAYFAST_SOURCE_RANGES` in `_shared/payfast.ts`).
