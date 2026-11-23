@@ -24,6 +24,11 @@ Updated by `ws12-product-lead` after every run. A sprint is DONE only when `ws12
 - [ ] AI model provider, budget and daily Tutor limit - needed by Sprint 6
 - [ ] Parent purchases: does a parent's purchase cover one linked child, all linked children, or only the parent (Product Bible Chapter 15, question 18) - needed by Sprint 2
 - [ ] Grade 11 sign-ups: allow Class of 2027 learners who are still in Grade 11 the full experience (Product Bible Chapter 15, question 13) - needed by Sprint 2
+- [ ] Approve the withdraw rule: withdrawing consent (or the parent removing the link) removes the link and stops the child's data being processed (Product Bible 3.3, proposed)
+- [ ] Parent consent page: should it show the learner's email, since no first name is stored before consent?
+- [ ] Should a partial Stripe refund remove access (today only a full refund does)?
+- [ ] Approve the consent policy version label `draft-2026-11` and the consent and parent wording, plus a first-language Afrikaans review of the new strings
+- [ ] Support email address for "Contact support" and the Help screen
 - Full list of open questions: `docs/product-bible.md` Chapter 15
 
 ---
@@ -61,16 +66,18 @@ Write `docs/product-bible.md` covering the 14 chapters in `docs/build-plan.md`.
 
 Built on 2026-11-16 (commits 110af22, ca9d128, cb5b7cd, 528a3a3, b47f2ee, ae35101). QA signed off every box in round 2 on ae35101. The migration was proven in PGlite only; it has not been applied to a Supabase project yet, so it may still be edited in place until it is first applied. After that every change goes in a new migration file. Left for Sprint 2: `create_invite()`, `redeem_invite()` and `claim_entitlements()`. TypeScript types are generated once the Supabase project exists.
 
-## Sprint 2 - Identity, Library and Parents (status: TODO)
+## Sprint 2 - Identity, Library and Parents (status: BLOCKED)
 
-- [ ] Welcome, Google sign-in, email sign-in
-- [ ] 5-step onboarding with progress indicator
-- [ ] Profile view and edit, subjects, exam date
-- [ ] My Library: purchased books (EN and AF) and bonus files from Supabase storage, by tier
-- [ ] Purchase flow hooks: PayFast ITN and Stripe webhook edge functions (sandbox only)
-- [ ] Parent linking both ways (invite code and add-parent), with POPIA parental consent
-- [ ] Consent hardening from Sprint 1 QA: bind `give_consent()` to the invited parent contact, expire consent requests after 30 days, decide what `withdraw_consent()` does to an active parent link
-- [ ] QA sign-off including RLS tests (a learner cannot read another learner's data)
+- [ ] Welcome, Google sign-in, email sign-in (BLOCKED: built and QA passed locally; live sign-in needs the Supabase project and Google OAuth client)
+- [x] 5-step onboarding with progress indicator
+- [x] Profile view and edit, subjects, exam date
+- [ ] My Library: purchased books (EN and AF) and bonus files from Supabase storage, by tier (BLOCKED: logic and screen QA passed locally; needs the Supabase project, tier contents and the book files)
+- [ ] Purchase flow hooks: PayFast ITN and Stripe webhook edge functions (sandbox only) (BLOCKED: logic and sandbox guards QA passed in tests; needs PayFast sandbox and Stripe test keys for a live sandbox run)
+- [x] Parent linking both ways (invite code and add-parent), with POPIA parental consent
+- [x] Consent hardening from Sprint 1 QA: bind `give_consent()` to the invited parent contact, expire consent requests after 30 days, decide what `withdraw_consent()` does to an active parent link
+- [ ] QA sign-off including RLS tests (a learner cannot read another learner's data) (RLS signed off locally in round 2; final sign-off after the blocked boxes run on a real project)
+
+Built on 2026-11-23 (commits c3715bb to 2b47b47). Interface in `docs/api-contract.md`, three new migrations (not applied anywhere yet), edge functions in `supabase/functions/`. Still to do once the project exists: run the Deno functions, generate TypeScript types, check Google data in `auth.identities`, build `create-checkout`.
 
 Verification note from Sprint 0 QA: confirm how Supabase handles Google name and picture metadata on each sign-in, and test that no name or picture is kept in app tables before parental consent (Product Bible 2.3).
 
@@ -125,6 +132,14 @@ Verification note from Sprint 0 QA: confirm how Supabase handles Google name and
 ## Run log
 
 Newest first. One entry per run: date, sprint, what was done, what QA found, what is blocked.
+
+### 2026-11-23 - Sprint 2 (BLOCKED)
+
+- Built: API contract; migrations for account state, onboarding save, invites with a rate limit, family, consent bound to the parent's verified email with 30 day expiry, entitlement claims, My Library by tier, private storage bucket, atomic profile update and language; edge functions for consent requests, library downloads, PayFast ITN and Stripe webhooks (sandbox only guards); screens for Welcome, sign in, register, email check, password reset, age, consent (learner and parent), 5 step onboarding, Profile edit, My Library, Family, Log out confirm; demo data for every new screen; account state guard on `/app`.
+- The coordinator ran `ws12-supabase`, `ws12-frontend` and `ws12-qa` directly.
+- QA round 1: FAIL on box 6 (consent page promised a withdraw path that did not exist; language not saved to the account), boxes 1, 4, 5 BLOCKED. Notes: profile edit not atomic, `/app` open before onboarding or consent, grants on future functions. All fixed (97852f6, f14be0e, bfa9792, 0474466, d9cc031, 2b47b47).
+- QA round 2: PASS locally on boxes 2, 3, 6, 7 and on RLS; boxes 1, 4, 5 BLOCKED on the Supabase project, Google OAuth client and payment sandbox keys. 400 tests pass (225 database, 175 app); format, copy, lint, type check and build pass. 360px and 1440px checked with Playwright.
+- Non-blocking notes for later: a learner can still set a trial date after the final with a direct write; Google name and picture in `auth.identities` to check on the real project; PayFast source IP read from `X-Forwarded-For` to confirm; Help and `create-checkout` not built yet.
 
 ### 2026-11-16 - Sprint 1 (DONE)
 
