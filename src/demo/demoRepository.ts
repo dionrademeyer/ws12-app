@@ -64,6 +64,9 @@ export function createDemoRepository(): LearnerRepository {
     getConsentRequest: async () => ({ ...demoConsentRequest }),
     giveConsent: async () => undefined,
     declineConsent: async () => undefined,
+    async withdrawConsent(consentId) {
+      family = family.filter((link) => link.consentId !== consentId)
+    },
 
     getLibrary: async () => structuredClone(demoLibrary),
     async getDownloadLink() {

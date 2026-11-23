@@ -10,6 +10,7 @@ import type {
   ConsentStatus,
   DownloadLink,
   FamilyLink,
+  FamilyLinkStatus,
   Invite,
   InviteKind,
   LearnerExamDates,
@@ -66,7 +67,7 @@ interface FamilyRow {
   other_user_id: string
   other_first_name: string | null
   relation: 'parent' | 'child'
-  status: string
+  status: FamilyLinkStatus
   waiting_on_me: boolean
   consent_id: string | null
 }
@@ -310,6 +311,7 @@ export function createSupabaseRepository(
       await rpc<string>('give_consent', { p_consent_id: consentId })
     },
     declineConsent: (consentId) => rpc<void>('decline_consent', { p_consent_id: consentId }),
+    withdrawConsent: (consentId) => rpc<void>('withdraw_consent', { p_consent_id: consentId }),
 
     async getLibrary(): Promise<LibraryItem[]> {
       const rows = (await rpc<LibraryRow[] | null>('my_library')) ?? []

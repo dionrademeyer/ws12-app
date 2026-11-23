@@ -23,10 +23,12 @@ export function FamilyScreen() {
   const query = useRepositoryQuery((repository) =>
     Promise.all([repository.getFamily(), repository.getAccountState()]),
   )
+  const [withdrawn, setWithdrawn] = useState(false)
 
   return (
     <div className="flex flex-col gap-4">
       <PageTitle>{t('menu.family')}</PageTitle>
+      {withdrawn && <Notice tone="success">{t('family.withdrawDone')}</Notice>}
       {query.state.status === 'loading' && <LoadingCard />}
       {query.state.status === 'error' && (
         <LoadError message={t('family.loadError')} onRetry={query.retry} />
@@ -36,6 +38,11 @@ export function FamilyScreen() {
           links={query.state.data[0]}
           parentView={isParent(query.state.data[1])}
           onChanged={query.retry}
+          onActing={() => setWithdrawn(false)}
+          onWithdrawn={() => {
+            setWithdrawn(true)
+            query.retry()
+          }}
         />
       )}
     </div>
@@ -50,9 +57,11 @@ interface FamilyProps {
   links: FamilyLink[]
   parentView: boolean
   onChanged: () => void
+  onActing: () => void
+  onWithdrawn: () => void
 }
 
-function Family({ links, parentView, onChanged }: FamilyProps) {
+function Family({ links, parentView, onChanged, onActing, onWithdrawn }: FamilyProps) {
   const { t } = useI18n()
   const { repository } = useSession()
   const inviteKind: InviteKind = parentView ? 'parent_to_learner' : 'learner_to_parent'
@@ -61,6 +70,7 @@ function Family({ links, parentView, onChanged }: FamilyProps) {
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<ErrorCode | null>(null)
   const [removing, setRemoving] = useState<FamilyLink | null>(null)
+  const [withdrawing, setWithdrawing] = useState<FamilyLink | null>(null)
 
   const fallback = parentView ? t('family.yourChild') : t('family.yourParent')
   const shown = links.filter((link) => link.relation === (parentView ? 'child' : 'parent'))
@@ -70,11 +80,14 @@ function Family({ links, parentView, onChanged }: FamilyProps) {
   async function act(key: string, action: () => Promise<unknown>, refresh = true) {
     setBusy(key)
     setError(null)
+    onActing()
     try {
       await action()
       if (refresh) onChanged()
+      return true
     } catch (cause) {
       setError(errorCodeOf(cause))
+      return false
     } finally {
       setBusy(null)
     }
@@ -123,6 +136,7 @@ function Family({ links, parentView, onChanged }: FamilyProps) {
                   act(`accept-${link.linkId}`, () => repository.acceptLink(link.linkId))
                 }
                 onRemove={() => setRemoving(link)}
+                onWithdraw={() => setWithdrawing(link)}
                 onResend={newInvite}
               />
             ))}
@@ -201,7 +215,32 @@ function Family({ links, parentView, onChanged }: FamilyProps) {
             )
           }}
         >
-          {t('family.removeBody')}
+          {removing.status === 'active' && removing.consentId
+            ? t('family.removeConsentBody', { name: nameOf(removing, fallback) })
+            : t('family.removeBody')}
+        </ConfirmDialog>
+      )}
+
+      {withdrawing?.consentId && (
+        <ConfirmDialog
+          title={t('family.withdrawConfirm', { name: nameOf(withdrawing, fallback) })}
+          confirmLabel={t('family.withdrawConsent')}
+          cancelLabel={t('common.cancel')}
+          tone="danger"
+          busy={busy === 'withdraw'}
+          onCancel={() => setWithdrawing(null)}
+          onConfirm={() => {
+            if (!repository || !withdrawing.consentId) return
+            const consentId = withdrawing.consentId
+            void act('withdraw', () => repository.withdrawConsent(consentId), false).then(
+              (done) => {
+                setWithdrawing(null)
+                if (done) onWithdrawn()
+              },
+            )
+          }}
+        >
+          {t('family.withdrawBody', { name: nameOf(withdrawing, fallback) })}
         </ConfirmDialog>
       )}
     </>
@@ -214,6 +253,7 @@ function LinkRow({
   busy,
   onAccept,
   onRemove,
+  onWithdraw,
   onResend,
 }: {
   link: FamilyLink
@@ -221,10 +261,13 @@ function LinkRow({
   busy: string | null
   onAccept: () => void
   onRemove: () => void
+  onWithdraw: () => void
   onResend: () => void
 }) {
   const { t } = useI18n()
   const pending = link.status === 'pending'
+  const removed = link.status === 'removed'
+  const canWithdraw = link.relation === 'child' && !pending && !!link.consentId
   const removeLabel = pending
     ? link.waitingOnMe
       ? t('family.decline')
@@ -236,12 +279,21 @@ function LinkRow({
         <p className="font-semibold">{name}</p>
         <span
           className={`rounded-full px-3 py-1 text-xs font-bold ${
-            pending ? 'bg-gold/30 text-navy' : 'bg-emerald-50 text-emerald-900'
+            pending
+              ? 'bg-gold/30 text-navy'
+              : removed
+                ? 'bg-navy/10 text-navy'
+                : 'bg-emerald-50 text-emerald-900'
           }`}
         >
-          {pending ? t('family.statusPending') : t('family.statusActive')}
+          {pending
+            ? t('family.statusPending')
+            : removed
+              ? t('family.statusRemoved')
+              : t('family.statusActive')}
         </span>
       </div>
+      {removed && <p className="text-sm text-navy/80">{t('family.removedByChild')}</p>}
       {pending && (
         <p className="text-sm text-navy/80">
           {link.waitingOnMe ? t('family.wantsToLink', { name }) : t('family.waitingFor', { name })}
@@ -266,14 +318,26 @@ function LinkRow({
             {t('family.resend')}
           </Button>
         )}
-        <Button
-          variant="secondary"
-          className="px-5"
-          onClick={onRemove}
-          aria-label={t('family.actionFor', { action: removeLabel, name })}
-        >
-          {removeLabel}
-        </Button>
+        {canWithdraw && (
+          <Button
+            variant="secondary"
+            className="px-5"
+            onClick={onWithdraw}
+            aria-label={t('family.actionFor', { action: t('family.withdrawConsent'), name })}
+          >
+            {t('family.withdrawConsent')}
+          </Button>
+        )}
+        {!removed && (
+          <Button
+            variant="secondary"
+            className="px-5"
+            onClick={onRemove}
+            aria-label={t('family.actionFor', { action: removeLabel, name })}
+          >
+            {removeLabel}
+          </Button>
+        )}
       </div>
     </li>
   )

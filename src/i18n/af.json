@@ -358,5 +358,12 @@
   "consent.copyLink": "Kopieer skakel",
   "consent.copied": "Skakel gekopieer.",
   "consent.copyFailed": "Kon nie kopieer nie. Stuur hierdie skakel: {url}",
-  "family.reviewConsent": "Lees en gee toestemming"
+  "family.reviewConsent": "Lees en gee toestemming",
+  "family.statusRemoved": "Koppeling verwyder",
+  "family.removedByChild": "Jou kind het die koppeling verwyder. Jou toestemming is steeds aktief.",
+  "family.withdrawConsent": "Trek toestemming terug",
+  "family.withdrawConfirm": "Trek jou toestemming vir {name} terug?",
+  "family.withdrawBody": "Die koppeling met {name} word verwyder en {name} se data word nie meer verwerk nie, tensy 'n ander ouer of voog ook toestemming gegee het. Jy kan later weer toestemming gee.",
+  "family.withdrawDone": "Jou toestemming is teruggetrek.",
+  "family.removeConsentBody": "Dit trek ook jou toestemming terug. {name} se data word nie meer verwerk nie, tensy 'n ander ouer of voog ook toestemming gegee het. Julle kan later weer koppel met 'n nuwe kode."
 }

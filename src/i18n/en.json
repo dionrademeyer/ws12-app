@@ -358,5 +358,12 @@
   "consent.copyLink": "Copy link",
   "consent.copied": "Link copied.",
   "consent.copyFailed": "Couldn't copy. Send this link: {url}",
-  "family.reviewConsent": "Review and give consent"
+  "family.reviewConsent": "Review and give consent",
+  "family.statusRemoved": "Link removed",
+  "family.removedByChild": "Link removed by your child. Your consent is still active.",
+  "family.withdrawConsent": "Withdraw consent",
+  "family.withdrawConfirm": "Withdraw your consent for {name}?",
+  "family.withdrawBody": "The link with {name} is removed and {name}'s data stops being processed, unless another parent or guardian has also given consent. You can give consent again later.",
+  "family.withdrawDone": "Your consent is withdrawn.",
+  "family.removeConsentBody": "This also withdraws your consent. {name}'s data stops being processed, unless another parent or guardian has also given consent. You can link again later with a new code."
 }

@@ -88,14 +88,19 @@ export interface Invite {
   expiresAt: string
 }
 
+// A removed link is listed only for the parent whose consent created it, while that consent is
+// still given, so the parent can still withdraw it.
+export type FamilyLinkStatus = 'pending' | 'active' | 'removed'
+
 export interface FamilyLink {
   linkId: string
   otherUserId: string
   otherFirstName: string | null
   relation: 'parent' | 'child'
-  status: string
+  status: FamilyLinkStatus
   waitingOnMe: boolean
-  // Set for a parent whose pending link is to a learner who still needs consent.
+  // Parents only: the request to answer on a pending link, or the given consent behind an
+  // active or removed link, which the parent can withdraw.
   consentId: string | null
 }
 
@@ -126,6 +131,7 @@ export interface ConsentRepository {
   getConsentRequest(consentId: string): Promise<ConsentRequest>
   giveConsent(consentId: string): Promise<void>
   declineConsent(consentId: string): Promise<void>
+  withdrawConsent(consentId: string): Promise<void>
 }
 
 export interface LibraryRepository {

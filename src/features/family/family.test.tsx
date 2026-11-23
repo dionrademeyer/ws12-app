@@ -135,6 +135,107 @@ describe('Family for a parent', () => {
     expect(screen.queryByRole('button', { name: 'Accept' })).toBeNull()
   })
 
+  const consentChild: FamilyLink = {
+    ...pendingChild,
+    linkId: 'link-consent',
+    status: 'active',
+    waitingOnMe: false,
+    consentId: 'consent-given',
+  }
+
+  it('withdraws consent on an active consent link after a confirm that explains the effect', async () => {
+    const user = userEvent.setup()
+    let links: FamilyLink[] = [consentChild]
+    const repository = mockRepository({
+      getFamily: async () => links,
+      getAccountState: async () => parentAccount,
+      withdrawConsent: async () => {
+        links = []
+      },
+    })
+    renderWithBackend('/app/family', { repository })
+    await user.click(await screen.findByRole('button', { name: 'Withdraw consent: Thabo' }))
+    const dialog = screen.getByRole('alertdialog', { name: 'Withdraw your consent for Thabo?' })
+    expect(dialog).toHaveTextContent(
+      "The link with Thabo is removed and Thabo's data stops being processed",
+    )
+    await user.click(within(dialog).getByRole('button', { name: 'Withdraw consent' }))
+
+    expect(repository.withdrawConsent).toHaveBeenCalledWith('consent-given')
+    expect(repository.removeLink).not.toHaveBeenCalled()
+    expect(await screen.findByText('Your consent is withdrawn.')).toBeInTheDocument()
+    expect(screen.queryByRole('alertdialog')).toBeNull()
+    expect(
+      await screen.findByRole('heading', { name: 'Invite your child to get started.' }),
+    ).toBeInTheDocument()
+  })
+
+  it('keeps the dialog choice safe: Cancel withdraws nothing, and a failure shows an error', async () => {
+    const user = userEvent.setup()
+    const repository = mockRepository({
+      getFamily: async () => [consentChild],
+      getAccountState: async () => parentAccount,
+    })
+    repository.withdrawConsent.mockRejectedValueOnce(new AppError('network'))
+    renderWithBackend('/app/family', { repository })
+    await user.click(await screen.findByRole('button', { name: 'Withdraw consent: Thabo' }))
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(repository.withdrawConsent).not.toHaveBeenCalled()
+
+    await user.click(screen.getByRole('button', { name: 'Withdraw consent: Thabo' }))
+    const dialog = screen.getByRole('alertdialog')
+    await user.click(within(dialog).getByRole('button', { name: 'Withdraw consent' }))
+    expect(await screen.findByRole('alert')).toBeInTheDocument()
+    expect(screen.queryByText('Your consent is withdrawn.')).toBeNull()
+  })
+
+  it('says that Remove on a consent link withdraws the consent too', async () => {
+    const user = userEvent.setup()
+    const repository = mockRepository({
+      getFamily: async () => [consentChild],
+      getAccountState: async () => parentAccount,
+    })
+    renderWithBackend('/app/family', { repository })
+    await user.click(await screen.findByRole('button', { name: 'Remove: Thabo' }))
+    const dialog = screen.getByRole('alertdialog', { name: 'Remove the link with Thabo?' })
+    expect(dialog).toHaveTextContent('This also withdraws your consent.')
+    await user.click(within(dialog).getByRole('button', { name: 'Remove' }))
+    expect(repository.removeLink).toHaveBeenCalledWith('link-consent')
+  })
+
+  it('keeps the plain Remove text on a link without consent', async () => {
+    const user = userEvent.setup()
+    const repository = mockRepository({
+      getFamily: async () => [{ ...pendingChild, status: 'active', waitingOnMe: false }],
+      getAccountState: async () => parentAccount,
+    })
+    renderWithBackend('/app/family', { repository })
+    await user.click(await screen.findByRole('button', { name: 'Remove: Thabo' }))
+    const dialog = screen.getByRole('alertdialog')
+    expect(dialog).toHaveTextContent('You can link again later with a new code.')
+    expect(dialog).not.toHaveTextContent('withdraws your consent')
+    expect(screen.queryByRole('button', { name: 'Withdraw consent: Thabo' })).toBeNull()
+  })
+
+  it('shows a link the child removed while consent is active, with Withdraw consent only', async () => {
+    const user = userEvent.setup()
+    const repository = mockRepository({
+      getFamily: async () => [{ ...consentChild, status: 'removed' }],
+      getAccountState: async () => parentAccount,
+    })
+    renderWithBackend('/app/family', { repository })
+    expect(
+      await screen.findByText('Link removed by your child. Your consent is still active.'),
+    ).toBeInTheDocument()
+    expect(screen.getByText('Link removed')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Remove: Thabo' })).toBeNull()
+    await user.click(screen.getByRole('button', { name: 'Withdraw consent: Thabo' }))
+    await user.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Withdraw consent' }),
+    )
+    expect(repository.withdrawConsent).toHaveBeenCalledWith('consent-given')
+  })
+
   it('shows an error with Retry when Family cannot load', async () => {
     const repository = mockRepository({
       getFamily: async () => {

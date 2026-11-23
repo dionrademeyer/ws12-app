@@ -106,6 +106,7 @@ describe('Supabase repository', () => {
     await repository.removeLink('link-9')
     await repository.giveConsent('consent-1')
     await repository.declineConsent('consent-1')
+    await repository.withdrawConsent('consent-1')
     await repository.saveOnboarding({
       first_name: 'Thabo',
       grade: 12,
@@ -130,6 +131,7 @@ describe('Supabase repository', () => {
       ['remove_link', { p_link_id: 'link-9' }],
       ['give_consent', { p_consent_id: 'consent-1' }],
       ['decline_consent', { p_consent_id: 'consent-1' }],
+      ['withdraw_consent', { p_consent_id: 'consent-1' }],
       ['save_onboarding', { p_answers: expect.objectContaining({ first_name: 'Thabo' }) }],
     ])
   })
