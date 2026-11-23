@@ -1,6 +1,7 @@
 // @vitest-environment node
 import type { PGlite } from '@electric-sql/pglite'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { CONSENT_POLICY_VERSION, contactHash } from '../functions/_shared/contact.ts'
 import {
   asAnon,
   asUser,
@@ -10,7 +11,7 @@ import {
   createTestDatabase,
   createUser,
   type Tx,
-} from './harness'
+} from './harness.ts'
 
 let db: PGlite
 
@@ -473,7 +474,7 @@ describe('consent before processing a minor', () => {
       asUser(db, minor, (tx) =>
         tx.query("update public.profiles set first_name = 'Lebo' where id = $1", [minor]),
       ),
-    ).rejects.toThrow(/parental consent is needed/)
+    ).rejects.toThrow(/consent_required/)
   })
 
   it('blocks study writes from a minor without consent', async () => {
@@ -490,7 +491,7 @@ describe('consent before processing a minor', () => {
   it('does not let a learner change their age answer or grant themselves roles', async () => {
     await expect(
       asUser(db, minor, (tx) => tx.query('select public.declare_age(true)')),
-    ).rejects.toThrow(/already been declared/)
+    ).rejects.toThrow(/not_allowed/)
     await expect(
       asUser(db, minor, (tx) =>
         tx.query('update public.age_declarations set is_adult = true where user_id = $1', [minor]),
@@ -503,14 +504,18 @@ describe('consent before processing a minor', () => {
     ).rejects.toThrow(/row-level security/)
     await expect(
       asUser(db, minor, (tx) => tx.query('select public.claim_parent_role()')),
-    ).rejects.toThrow(/only an adult account/)
+    ).rejects.toThrow(/not_allowed/)
   })
 })
 
 describe('give_consent()', () => {
-  async function requestConsent(learner: string): Promise<string> {
+  async function requestConsent(learner: string, parentEmail: string): Promise<string> {
+    const hash = await contactHash(parentEmail)
     const result = await asUser(db, learner, (tx) =>
-      tx.query<{ id: string }>("select public.request_consent('hash-of-contact', 'v1') as id"),
+      tx.query<{ id: string }>('select public.request_consent($1, $2) as id', [
+        hash,
+        CONSENT_POLICY_VERSION,
+      ]),
     )
     return result.rows[0]!.id
   }
@@ -524,7 +529,7 @@ describe('give_consent()', () => {
       [learner, parent],
     )
     const pendingId = pending.rows[0]!.id
-    const consentId = await requestConsent(learner)
+    const consentId = await requestConsent(learner, 'parent.pending@example.test')
     await db.query(
       "insert into public.consent_contacts (consent_id, channel, contact_encrypted) values ($1, 'email', '\\x00')",
       [consentId],
@@ -566,7 +571,7 @@ describe('give_consent()', () => {
   it('creates an active link when none exists yet', async () => {
     const learner = await createMinorLearner(db, 'minor.new@example.test')
     const parent = await createParent(db, 'parent.new@example.test')
-    const consentId = await requestConsent(learner)
+    const consentId = await requestConsent(learner, 'parent.new@example.test')
     await asUser(db, parent, (tx) => tx.query('select public.give_consent($1)', [consentId]))
     const links = await db.query<{ status: string }>(
       'select status from public.parent_links where learner_id = $1 and parent_id = $2',
@@ -579,25 +584,25 @@ describe('give_consent()', () => {
     const learner = await createMinorLearner(db, 'minor.refused@example.test')
     const notParent = await createAdultLearner(db, 'adult.notparent@example.test')
     const parent = await createParent(db, 'parent.refused@example.test')
-    const consentId = await requestConsent(learner)
+    const consentId = await requestConsent(learner, 'parent.refused@example.test')
 
     await expect(
       asUser(db, learner, (tx) => tx.query('select public.give_consent($1)', [consentId])),
-    ).rejects.toThrow(/cannot give consent for themselves/)
+    ).rejects.toThrow(/not_allowed/)
     await expect(
       asUser(db, notParent, (tx) => tx.query('select public.give_consent($1)', [consentId])),
-    ).rejects.toThrow(/only a parent account/)
+    ).rejects.toThrow(/not_allowed/)
 
     await asUser(db, parent, (tx) => tx.query('select public.give_consent($1)', [consentId]))
     await expect(
       asUser(db, parent, (tx) => tx.query('select public.give_consent($1)', [consentId])),
-    ).rejects.toThrow(/not pending/)
+    ).rejects.toThrow(/not_allowed/)
   })
 
   it('keeps one link row when a second request is consented for the same pair', async () => {
     const learner = await createMinorLearner(db, 'minor.twice@example.test')
     const parent = await createParent(db, 'parent.twice@example.test')
-    const first = await requestConsent(learner)
+    const first = await requestConsent(learner, 'parent.twice@example.test')
     await asUser(db, parent, (tx) => tx.query('select public.give_consent($1)', [first]))
     await asUser(db, parent, async (tx) => {
       const link = await tx.query<{ id: string }>('select id from public.parent_links')
@@ -608,7 +613,7 @@ describe('give_consent()', () => {
       await tx.query('select public.withdraw_consent($1)', [consent.rows[0]!.id])
     })
 
-    const second = await requestConsent(learner)
+    const second = await requestConsent(learner, 'parent.twice@example.test')
     await asUser(db, parent, (tx) => tx.query('select public.give_consent($1)', [second]))
     const links = await db.query<{ status: string }>(
       'select status from public.parent_links where learner_id = $1 and parent_id = $2',
@@ -659,7 +664,7 @@ describe('parent_links', () => {
     const linkId = link.rows[0]!.id
     await expect(
       asUser(db, parent, (tx) => tx.query('select public.accept_link($1)', [linkId])),
-    ).rejects.toThrow(/no pending link/)
+    ).rejects.toThrow(/not_found/)
     await asUser(db, learner, (tx) => tx.query('select public.accept_link($1)', [linkId]))
     const row = await db.query('select status from public.parent_links where id = $1', [linkId])
     expect(row.rows).toEqual([{ status: 'active' }])
@@ -760,7 +765,7 @@ describe('parents read summaries, not raw data', () => {
       asUser(db, stranger, (tx) =>
         tx.query('select * from public.parent_learner_summary($1)', [learner]),
       ),
-    ).rejects.toThrow(/no active link/)
+    ).rejects.toThrow(/not_allowed/)
   })
 })
 
@@ -1285,15 +1290,25 @@ describe('client privileges', () => {
   const expectedFunctionGrants = [
     'accept_link(uuid)',
     'can_read_content_body(uuid)',
+    'claim_entitlements()',
     'claim_parent_role()',
+    'consent_request_for_parent(uuid)',
     'content_body(uuid)',
+    'create_invite(text)',
     'declare_age(boolean)',
+    'decline_consent(uuid)',
     'give_consent(uuid)',
     'has_consent()',
     'is_admin()',
+    'library_download_path(uuid)',
+    'my_account_state()',
+    'my_family()',
+    'my_library()',
     'parent_learner_summary(uuid)',
+    'redeem_invite(text)',
     'remove_link(uuid)',
     'request_consent(text,text)',
+    'save_onboarding(jsonb)',
     'withdraw_consent(uuid)',
   ].map((signature) => `authenticated EXECUTE ${signature}`)
 

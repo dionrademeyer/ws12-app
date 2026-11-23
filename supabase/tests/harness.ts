@@ -6,10 +6,12 @@ import { join } from 'node:path'
 const supabaseDir = join(import.meta.dirname, '..')
 
 // The parts of a Supabase database that migrations rely on: the auth schema, auth.uid(),
-// the client roles and the default privileges Supabase gives those roles on new objects.
+// the client roles, the storage tables and the default privileges Supabase gives those roles
+// on new objects.
 const supabaseStub = `
   create schema auth;
   create schema extensions;
+  create schema storage;
   create role anon nologin;
   create role authenticated nologin;
   create role service_role nologin bypassrls;
@@ -22,6 +24,20 @@ const supabaseStub = `
     email_confirmed_at timestamptz,
     created_at timestamptz not null default now()
   );
+
+  create table storage.buckets (
+    id text primary key,
+    name text not null unique,
+    public boolean not null default false
+  );
+  create table storage.objects (
+    id uuid primary key default gen_random_uuid(),
+    bucket_id text references storage.buckets (id),
+    name text not null
+  );
+  alter table storage.objects enable row level security;
+  grant usage on schema storage to anon, authenticated, service_role;
+  grant all on storage.buckets, storage.objects to anon, authenticated, service_role;
 
   create function auth.uid() returns uuid language sql stable as $$
     select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid
@@ -52,10 +68,15 @@ export async function createTestDatabase({ seed = false } = {}): Promise<PGlite>
   return db
 }
 
-export async function createUser(db: PGlite, email: string): Promise<string> {
+export async function createUser(
+  db: PGlite,
+  email: string,
+  { verified = true } = {},
+): Promise<string> {
   const result = await db.query<{ id: string }>(
-    'insert into auth.users (email, email_confirmed_at) values ($1, now()) returning id',
-    [email],
+    `insert into auth.users (email, email_confirmed_at)
+     values ($1, case when $2::boolean then now() end) returning id`,
+    [email, verified],
   )
   const id = result.rows[0]?.id
   if (!id) throw new Error(`could not create user ${email}`)
@@ -74,6 +95,14 @@ export async function asUser<T>(
   })
 }
 
+// Runs as the service role, like an edge function with the service role key.
+export async function asService<T>(db: PGlite, work: (tx: Tx) => Promise<T>): Promise<T> {
+  return db.transaction(async (tx) => {
+    await tx.exec('set local role service_role')
+    return work(tx)
+  })
+}
+
 export async function asAnon<T>(db: PGlite, work: (tx: Tx) => Promise<T>): Promise<T> {
   return db.transaction(async (tx) => {
     await tx.exec('set local role anon')
@@ -81,8 +110,12 @@ export async function asAnon<T>(db: PGlite, work: (tx: Tx) => Promise<T>): Promi
   })
 }
 
-export async function createAdultLearner(db: PGlite, email: string): Promise<string> {
-  const id = await createUser(db, email)
+export async function createAdultLearner(
+  db: PGlite,
+  email: string,
+  options: { verified?: boolean } = {},
+): Promise<string> {
+  const id = await createUser(db, email, options)
   await asUser(db, id, (tx) => tx.query('select public.declare_age(true)'))
   return id
 }
@@ -93,8 +126,12 @@ export async function createMinorLearner(db: PGlite, email: string): Promise<str
   return id
 }
 
-export async function createParent(db: PGlite, email: string): Promise<string> {
-  const id = await createAdultLearner(db, email)
+export async function createParent(
+  db: PGlite,
+  email: string,
+  options: { verified?: boolean } = {},
+): Promise<string> {
+  const id = await createAdultLearner(db, email, options)
   await asUser(db, id, (tx) => tx.query('select public.claim_parent_role()'))
   return id
 }

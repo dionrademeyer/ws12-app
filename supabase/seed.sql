@@ -32,7 +32,7 @@ values ('00000000-0000-4000-8000-000000000d30', 'demo.thabo@demo.invalid', '{"la
 on conflict (id) do nothing;
 
 update public.profiles
-set first_name = 'Thabo', grade = 12, province = 'Gauteng', is_demo = true, onboarding_step = 5,
+set first_name = 'Thabo', grade = 12, province = 'GP', is_demo = true, onboarding_step = 5,
   onboarded_at = now()
 where id = '00000000-0000-4000-8000-000000000d30';
 

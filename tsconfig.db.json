@@ -7,11 +7,17 @@
     "moduleResolution": "bundler",
     "types": ["node", "vitest/globals"],
     "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
     "noUncheckedIndexedAccess": true,
     "verbatimModuleSyntax": true,
     "isolatedModules": true,
+    "allowImportingTsExtensions": true,
+    "paths": {
+      "npm:@supabase/supabase-js@2": ["./node_modules/@supabase/supabase-js"]
+    },
     "skipLibCheck": true,
     "noEmit": true
   },
-  "include": ["supabase/tests"]
+  "include": ["supabase/tests", "supabase/functions"]
 }
