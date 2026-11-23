@@ -1,6 +1,7 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
+import { renderWithBackend } from '../test/fakeBackend'
 import { App } from './App'
 
 function startDemo() {
@@ -35,6 +36,9 @@ describe('welcome and demo mode', () => {
     '/app/profile',
     '/app/settings',
     '/app/notifications',
+    '/app/library',
+    '/app/family',
+    '/start/onboarding',
     '/app/unknown',
   ])('shows the demo banner on %s', async (path) => {
     startDemo()
@@ -113,14 +117,48 @@ describe('app shell', () => {
     expect(screen.queryByRole('button', { name: 'Back' })).toBeNull()
   })
 
-  it('logs out of the demo from the avatar menu', async () => {
+  it('logs out of the demo from the avatar menu after a confirm', async () => {
     const user = userEvent.setup()
     startDemo()
     render(<App initialPath="/app/dashboard" />)
     await user.click(await screen.findByRole('button', { name: 'Account menu' }))
     await user.click(screen.getByRole('menuitem', { name: 'Log out' }))
+
+    const dialog = screen.getByRole('alertdialog', { name: 'Log out of WS12?' })
+    expect(within(dialog).getByRole('button', { name: 'Cancel' })).toHaveFocus()
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('alertdialog')).toBeNull()
+    expect(window.sessionStorage.getItem('ws12.demo')).toBe('on')
+
+    await user.click(screen.getByRole('button', { name: 'Account menu' }))
+    await user.click(screen.getByRole('menuitem', { name: 'Log out' }))
+    await user.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Log out' }),
+    )
     expect(await screen.findByRole('button', { name: 'Try the demo' })).toBeInTheDocument()
     expect(window.sessionStorage.getItem('ws12.demo')).toBeNull()
+  })
+
+  it('closes the log out confirm with Escape', async () => {
+    const user = userEvent.setup()
+    startDemo()
+    render(<App initialPath="/app/dashboard" />)
+    await user.click(await screen.findByRole('button', { name: 'Account menu' }))
+    await user.click(screen.getByRole('menuitem', { name: 'Log out' }))
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('alertdialog')).toBeNull()
+  })
+
+  it('signs a real account out through Supabase and returns to Welcome', async () => {
+    const user = userEvent.setup()
+    const { auth } = renderWithBackend('/app/dashboard')
+    await user.click(await screen.findByRole('button', { name: 'Account menu' }))
+    await user.click(screen.getByRole('menuitem', { name: 'Log out' }))
+    await user.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Log out' }),
+    )
+    expect(await screen.findByRole('button', { name: 'Continue with Google' })).toBeInTheDocument()
+    expect(auth.signOut).toHaveBeenCalled()
   })
 })
 

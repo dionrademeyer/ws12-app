@@ -1,10 +1,11 @@
-import { Suspense } from 'react'
+import { Suspense, useState } from 'react'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useSession } from '../auth/useSession'
 import { useLearnerProfile } from '../data/useLearnerProfile'
 import { useI18n } from '../i18n/useI18n'
 import { AvatarMenu } from '../ui/AvatarMenu'
 import { BottomNav } from '../ui/BottomNav'
+import { ConfirmDialog } from '../ui/ConfirmDialog'
 import { DemoBanner } from '../ui/DemoBanner'
 import { Header } from '../ui/Header'
 import { Icon } from '../ui/Icon'
@@ -21,12 +22,27 @@ function initialsOf(firstName?: string, lastName?: string): string {
 
 export function AppShell() {
   const { t } = useI18n()
-  const { mode, leaveDemo } = useSession()
+  const { mode, signOut } = useSession()
   const profile = useLearnerProfile()
   const navigate = useNavigate()
   const location = useLocation()
   const onDashboard = location.pathname === dashboardPath
   const unread = 0
+  const [confirmLogout, setConfirmLogout] = useState(false)
+  const [loggingOut, setLoggingOut] = useState(false)
+  const [logoutFailed, setLogoutFailed] = useState(false)
+
+  async function logOut() {
+    setLoggingOut(true)
+    setLogoutFailed(false)
+    try {
+      await signOut()
+      navigate('/', { replace: true })
+    } catch {
+      setLogoutFailed(true)
+      setLoggingOut(false)
+    }
+  }
 
   const initials =
     profile.status === 'ready'
@@ -57,10 +73,7 @@ export function AppShell() {
           <AvatarMenu
             initials={initials}
             items={avatarMenu}
-            onLogout={() => {
-              leaveDemo()
-              navigate('/')
-            }}
+            onLogout={() => setConfirmLogout(true)}
           />
         }
       />
@@ -73,6 +86,21 @@ export function AppShell() {
         </main>
       </div>
       <BottomNav items={primaryNav} />
+      {confirmLogout && (
+        <ConfirmDialog
+          title={t('logout.title')}
+          confirmLabel={t('menu.logout')}
+          cancelLabel={t('common.cancel')}
+          busy={loggingOut}
+          onConfirm={logOut}
+          onCancel={() => {
+            setConfirmLogout(false)
+            setLogoutFailed(false)
+          }}
+        >
+          {logoutFailed ? t('logout.failed') : t('logout.body')}
+        </ConfirmDialog>
+      )}
     </div>
   )
 }
