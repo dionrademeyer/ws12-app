@@ -22,6 +22,10 @@ export const LibraryScreen = lazy(() =>
   import('../features/library/LibraryScreen').then((m) => ({ default: m.LibraryScreen })),
 )
 
+export const FamilyScreen = lazy(() =>
+  import('../features/family/FamilyScreen').then((m) => ({ default: m.FamilyScreen })),
+)
+
 export const SignInScreen = lazy(() =>
   import('../features/auth/SignInScreen').then((m) => ({ default: m.SignInScreen })),
 )
