@@ -41,7 +41,7 @@ export interface ProfileUpdate {
   province: string | null
   schoolId: string | null
   schoolNameOther: string | null
-  subjects: { subjectId: string; targetMark: number | null }[]
+  subjects: { code: string; targetMark: number | null }[]
   examDates: LearnerExamDates
 }
 

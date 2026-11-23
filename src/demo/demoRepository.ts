@@ -38,8 +38,8 @@ export function createDemoRepository(): LearnerRepository {
         school: update.schoolNameOther ? null : school,
         schoolNameOther: update.schoolNameOther,
         examDates: { ...update.examDates },
-        subjects: update.subjects.flatMap(({ subjectId, targetMark }) => {
-          const found = demoSubjects.find((entry) => entry.id === subjectId)
+        subjects: update.subjects.flatMap(({ code, targetMark }) => {
+          const found = demoSubjects.find((entry) => entry.code === code)
           return found ? [{ ...found, targetMark }] : []
         }),
       }

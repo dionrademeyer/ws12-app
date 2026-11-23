@@ -169,59 +169,26 @@ export function createSupabaseRepository(
     }
   }
 
+  // One checked call, so a failure part way never leaves half an edit saved. The database
+  // accepts only the nine province codes, so an empty province is left as it is.
   async function updateProfile(update: ProfileUpdate): Promise<LearnerProfile> {
-    check(
-      await client
-        .from('profiles')
-        .update({
-          first_name: update.firstName,
-          grade: update.grade,
-          province: update.province,
-          school_id: update.schoolNameOther ? null : update.schoolId,
-          school_name_other: update.schoolNameOther,
-        })
-        .eq('id', user.id),
-    )
-
-    const keep = update.subjects.map((subject) => subject.subjectId)
-    const removeQuery = client.from('learner_subjects').delete().eq('learner_id', user.id)
-    check(
-      await (keep.length
-        ? removeQuery.not('subject_id', 'in', `(${keep.join(',')})`)
-        : removeQuery),
-    )
-    if (keep.length) {
-      check(
-        await client.from('learner_subjects').upsert(
-          update.subjects.map((subject) => ({
-            learner_id: user.id,
-            subject_id: subject.subjectId,
-            target_mark: subject.targetMark,
-          })),
-          { onConflict: 'learner_id,subject_id' },
-        ),
-      )
+    const schoolNameOther = update.schoolNameOther?.trim() || null
+    const changes: Record<string, unknown> = {
+      first_name: update.firstName,
+      grade: update.grade,
+      school_id: schoolNameOther ? null : update.schoolId,
+      school_name_other: schoolNameOther,
+      subjects: update.subjects.map((subject) => ({
+        code: subject.code,
+        target_mark: subject.targetMark,
+      })),
+      exam_dates: (['trial', 'final'] as const).flatMap((kind) => {
+        const date = update.examDates[kind]
+        return date ? [{ kind, date }] : []
+      }),
     }
-
-    for (const kind of ['trial', 'final'] as const) {
-      check(
-        await client
-          .from('learner_exam_dates')
-          .delete()
-          .eq('learner_id', user.id)
-          .eq('kind', kind)
-          .is('subject_id', null),
-      )
-      const date = update.examDates[kind]
-      if (date) {
-        check(
-          await client
-            .from('learner_exam_dates')
-            .insert({ learner_id: user.id, kind, subject_id: null, starts_on: date }),
-        )
-      }
-    }
-
+    if (update.province) changes.province = update.province
+    await rpc<void>('update_profile', { p_changes: changes })
     return getProfile()
   }
 

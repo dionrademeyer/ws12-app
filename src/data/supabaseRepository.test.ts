@@ -320,14 +320,63 @@ describe('Supabase repository', () => {
     })
   })
 
-  it('updates only the signed-in learner rows when saving the profile', async () => {
-    const { client, calls } = fakeClient({
+  it('saves the profile in one update_profile call and writes no table directly', async () => {
+    const { client, raw, calls } = fakeClient({
+      tables: {
+        profiles: {
+          data: {
+            id: 'user-1',
+            first_name: 'Thabo',
+            grade: 12,
+            province: 'GP',
+            school_name_other: 'My School',
+            school: null,
+          },
+          error: null,
+        },
+      },
+    })
+    const saved = await createSupabaseRepository(client, user).updateProfile({
+      firstName: 'Thabo',
+      grade: 12,
+      province: 'GP',
+      schoolId: 'school-1',
+      schoolNameOther: ' My School ',
+      subjects: [{ code: 'MATH', targetMark: 70 }],
+      examDates: { trial: '2027-08-23', final: null },
+    })
+
+    expect(raw.rpc.mock.calls).toEqual([
+      [
+        'update_profile',
+        {
+          p_changes: {
+            first_name: 'Thabo',
+            grade: 12,
+            province: 'GP',
+            school_id: null,
+            school_name_other: 'My School',
+            subjects: [{ code: 'MATH', target_mark: 70 }],
+            exam_dates: [{ kind: 'trial', date: '2027-08-23' }],
+          },
+        },
+      ],
+    ])
+    const writes = calls.filter((call) =>
+      ['update', 'delete', 'insert', 'upsert'].includes(call.method),
+    )
+    expect(writes).toEqual([])
+    expect(saved.firstName).toBe('Thabo')
+  })
+
+  it('leaves out an empty province, keeps a listed school and sends empty lists', async () => {
+    const { client, raw } = fakeClient({
       tables: {
         profiles: {
           data: {
             id: 'user-1',
             first_name: 'T',
-            grade: 12,
+            grade: 11,
             province: null,
             school_name_other: null,
             school: null,
@@ -337,43 +386,41 @@ describe('Supabase repository', () => {
       },
     })
     await createSupabaseRepository(client, user).updateProfile({
-      firstName: 'Thabo',
-      grade: 12,
-      province: 'GP',
-      schoolId: null,
-      schoolNameOther: 'My School',
-      subjects: [{ subjectId: 'm', targetMark: 70 }],
-      examDates: { trial: '2027-08-23', final: null },
+      firstName: 'T',
+      grade: 11,
+      province: null,
+      schoolId: 'school-1',
+      schoolNameOther: null,
+      subjects: [],
+      examDates: { trial: null, final: null },
     })
-    expect(calls).toContainEqual({
-      table: 'profiles',
-      method: 'update',
-      args: [
-        {
-          first_name: 'Thabo',
-          grade: 12,
-          province: 'GP',
-          school_id: null,
-          school_name_other: 'My School',
-        },
-      ],
+    expect(raw.rpc).toHaveBeenCalledWith('update_profile', {
+      p_changes: {
+        first_name: 'T',
+        grade: 11,
+        school_id: 'school-1',
+        school_name_other: null,
+        subjects: [],
+        exam_dates: [],
+      },
     })
-    expect(calls).toContainEqual({
-      table: 'learner_subjects',
-      method: 'upsert',
-      args: [
-        [{ learner_id: 'user-1', subject_id: 'm', target_mark: 70 }],
-        { onConflict: 'learner_id,subject_id' },
-      ],
+  })
+
+  it('saves nothing else and passes the error on when update_profile refuses', async () => {
+    const { client, raw } = fakeClient({
+      rpc: () => ({ data: null, error: { message: 'invalid_input', code: 'P0001' } }),
     })
-    expect(calls).toContainEqual({
-      table: 'learner_exam_dates',
-      method: 'insert',
-      args: [{ learner_id: 'user-1', kind: 'trial', subject_id: null, starts_on: '2027-08-23' }],
-    })
-    const inserts = calls.filter(
-      (call) => call.table === 'learner_exam_dates' && call.method === 'insert',
-    )
-    expect(inserts).toHaveLength(1)
+    await expect(
+      createSupabaseRepository(client, user).updateProfile({
+        firstName: 'Thabo',
+        grade: 12,
+        province: 'GP',
+        schoolId: null,
+        schoolNameOther: null,
+        subjects: [],
+        examDates: { trial: null, final: null },
+      }),
+    ).rejects.toMatchObject({ code: 'invalid_input' })
+    expect(raw.from).not.toHaveBeenCalled()
   })
 })

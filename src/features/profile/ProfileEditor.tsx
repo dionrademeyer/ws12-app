@@ -97,10 +97,11 @@ function EditForm({
         province: province || null,
         schoolId: other ? null : (school.school?.id ?? null),
         schoolNameOther: other,
-        subjects: chosen.flatMap((entry) => {
-          const subject = subjects.find((option) => option.code === entry.code)
-          return subject ? [{ subjectId: subject.id, targetMark: entry.targetMark }] : []
-        }),
+        subjects: chosen.flatMap((entry) =>
+          subjects.some((option) => option.code === entry.code)
+            ? [{ code: entry.code, targetMark: entry.targetMark }]
+            : [],
+        ),
         examDates,
       })
       onSaved(next)

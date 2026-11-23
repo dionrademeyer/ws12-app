@@ -75,7 +75,7 @@ describe('profile', () => {
         firstName: 'Thabiso',
         grade: 12,
         examDates: { trial: '2027-08-23', final: '2027-10-25' },
-        subjects: expect.arrayContaining([{ subjectId: 'demo-subject-math', targetMark: 70 }]),
+        subjects: expect.arrayContaining([{ code: 'MATH', targetMark: 70 }]),
       }),
     )
   })
