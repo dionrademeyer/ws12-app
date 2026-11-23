@@ -13,6 +13,7 @@ import {
   ForgotPasswordScreen,
   NotFoundScreen,
   NotificationsScreen,
+  OnboardingScreen,
   ParentConsentScreen,
   ProfileScreen,
   RegisterScreen,
@@ -46,6 +47,7 @@ export const routes: RouteObject[] = [
           { path: '/start', element: <AccountGateScreen /> },
           { path: '/start/age', element: <AgeScreen /> },
           { path: '/start/consent', element: <ConsentScreen /> },
+          { path: '/start/onboarding', element: <OnboardingScreen /> },
         ],
       },
       {

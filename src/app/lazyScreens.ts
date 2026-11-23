@@ -61,3 +61,7 @@ export const ParentConsentScreen = lazy(() =>
     default: m.ParentConsentScreen,
   })),
 )
+
+export const OnboardingScreen = lazy(() =>
+  import('../features/onboarding/OnboardingScreen').then((m) => ({ default: m.OnboardingScreen })),
+)
