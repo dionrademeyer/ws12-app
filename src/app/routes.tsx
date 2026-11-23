@@ -1,4 +1,5 @@
 import { Navigate, type RouteObject } from 'react-router-dom'
+import { RequireAccountReady } from '../auth/RequireAccountReady'
 import { RequireSession } from '../auth/RequireSession'
 import { DashboardScreen } from '../features/dashboard/DashboardScreen'
 import { PlannedScreen } from '../features/planned/PlannedScreen'
@@ -54,23 +55,28 @@ export const routes: RouteObject[] = [
       },
       {
         path: '/app',
-        element: <AppShell />,
+        element: <RequireAccountReady />,
         children: [
-          { index: true, element: <Navigate to={dashboardPath} replace /> },
-          { path: 'dashboard', element: <DashboardScreen /> },
-          { path: 'goals', element: <PlannedScreen titleKey="nav.goals" /> },
-          { path: 'planner', element: <PlannedScreen titleKey="nav.planner" /> },
-          { path: 'progress', element: <PlannedScreen titleKey="nav.progress" /> },
-          { path: 'tutor', element: <PlannedScreen titleKey="nav.tutor" /> },
-          { path: 'journey', element: <PlannedScreen titleKey="nav.journey" /> },
-          { path: 'strategies', element: <PlannedScreen titleKey="nav.strategies" /> },
-          { path: 'library', element: <LibraryScreen /> },
-          { path: 'family', element: <FamilyScreen /> },
-          { path: 'help', element: <PlannedScreen titleKey="menu.help" /> },
-          { path: 'profile', element: <ProfileScreen /> },
-          { path: 'settings', element: <SettingsScreen /> },
-          { path: 'notifications', element: <NotificationsScreen /> },
-          { path: '*', element: <NotFoundScreen /> },
+          {
+            element: <AppShell />,
+            children: [
+              { index: true, element: <Navigate to={dashboardPath} replace /> },
+              { path: 'dashboard', element: <DashboardScreen /> },
+              { path: 'goals', element: <PlannedScreen titleKey="nav.goals" /> },
+              { path: 'planner', element: <PlannedScreen titleKey="nav.planner" /> },
+              { path: 'progress', element: <PlannedScreen titleKey="nav.progress" /> },
+              { path: 'tutor', element: <PlannedScreen titleKey="nav.tutor" /> },
+              { path: 'journey', element: <PlannedScreen titleKey="nav.journey" /> },
+              { path: 'strategies', element: <PlannedScreen titleKey="nav.strategies" /> },
+              { path: 'library', element: <LibraryScreen /> },
+              { path: 'family', element: <FamilyScreen /> },
+              { path: 'help', element: <PlannedScreen titleKey="menu.help" /> },
+              { path: 'profile', element: <ProfileScreen /> },
+              { path: 'settings', element: <SettingsScreen /> },
+              { path: 'notifications', element: <NotificationsScreen /> },
+              { path: '*', element: <NotFoundScreen /> },
+            ],
+          },
         ],
       },
     ],

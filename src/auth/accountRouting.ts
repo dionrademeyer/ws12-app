@@ -26,3 +26,9 @@ export function nextAccountPath(state: AccountState, returnTo: string | null = n
   if (!state.onboarded) return onboardingPath
   return '/app/dashboard'
 }
+
+// Ready for the app: the age question is answered, a minor has consent, and the person is
+// onboarded, or is a parent, who starts in Family.
+export function isAccountReady(state: AccountState): boolean {
+  return !nextAccountPath(state).startsWith(`${startPath}/`)
+}

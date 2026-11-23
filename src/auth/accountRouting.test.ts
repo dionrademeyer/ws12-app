@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { AccountState } from '../data/learner'
-import { canSaveLearnerData, nextAccountPath } from './accountRouting'
+import { canSaveLearnerData, isAccountReady, nextAccountPath } from './accountRouting'
 
 const base: AccountState = {
   isAdult: true,
@@ -50,5 +50,15 @@ describe('routing after sign-in', () => {
     expect(canSaveLearnerData({ ...base, isAdult: false, consentStatus: 'pending' })).toBe(false)
     expect(canSaveLearnerData({ ...base, isAdult: false, consentStatus: 'given' })).toBe(true)
     expect(canSaveLearnerData({ ...base, isAdult: null, consentStatus: 'given' })).toBe(true)
+  })
+
+  it('treats only an onboarded account, or a parent, as ready for the app', () => {
+    expect(isAccountReady({ ...base, onboarded: true })).toBe(true)
+    expect(isAccountReady({ ...base, roles: ['learner', 'parent'] })).toBe(true)
+    expect(isAccountReady(base)).toBe(false)
+    expect(isAccountReady({ ...base, isAdult: null, onboarded: true })).toBe(false)
+    expect(
+      isAccountReady({ ...base, isAdult: false, consentStatus: 'withdrawn', onboarded: true }),
+    ).toBe(false)
   })
 })

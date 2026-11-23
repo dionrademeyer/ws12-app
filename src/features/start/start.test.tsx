@@ -80,8 +80,12 @@ describe('account check after sign-in', () => {
         subjects: [{ code: 'MATH', target_mark: 70 }],
       },
     })
+    let onboarded = false
     const repository = mockRepository({
-      getAccountState: async () => ({ ...waitingMinor, consentStatus: 'given' }),
+      getAccountState: async () => ({ ...waitingMinor, consentStatus: 'given', onboarded }),
+      saveOnboarding: async () => {
+        onboarded = true
+      },
     })
     renderWithBackend('/start', { repository })
     expect(

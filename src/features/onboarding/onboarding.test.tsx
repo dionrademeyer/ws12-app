@@ -92,7 +92,13 @@ describe('onboarding', () => {
 
   it('sends the answers with Start my journey when the account can save them', async () => {
     const user = userEvent.setup()
-    const repository = mockRepository({ getAccountState: async () => newAdult })
+    let onboarded = false
+    const repository = mockRepository({
+      getAccountState: async () => ({ ...newAdult, onboarded }),
+      saveOnboarding: async () => {
+        onboarded = true
+      },
+    })
     renderWithBackend('/start/onboarding', { repository })
     await fillStepOne(user)
     await user.click(screen.getByRole('button', { name: 'Next' }))
