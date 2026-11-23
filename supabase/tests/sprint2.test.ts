@@ -1022,6 +1022,48 @@ describe('remove_link() on a link that consent created', () => {
     expect((await accountState(learner))?.consent_status).toBe('given')
   })
 
+  it('keeps the removed link in Family for the consenting parent, so they can still withdraw', async () => {
+    const { learner, parent, consentId, linkId } = await consentedPair('learner.removes.withdraw')
+    const otherParent = await createParent(db, email('learner.removes.withdraw.other'))
+    await call(learner, 'select public.remove_link($1)', [linkId])
+
+    expect(await family(parent)).toEqual([
+      expect.objectContaining({
+        link_id: linkId,
+        relation: 'child',
+        status: 'removed',
+        waiting_on_me: false,
+        consent_id: consentId,
+      }),
+    ])
+    expect(await family(learner)).toEqual([])
+    expect(await family(otherParent)).toEqual([])
+    await expectCode(call(parent, 'select public.remove_link($1)', [linkId]), 'not_found')
+
+    await call(parent, 'select public.withdraw_consent($1)', [consentId])
+
+    expect((await consentRow(consentId))?.status).toBe('withdrawn')
+    expect((await accountState(learner))?.consent_status).toBe('withdrawn')
+    expect(await family(parent)).toEqual([])
+    expect(await family(learner)).toEqual([])
+  })
+
+  it('does not show a removed link to a second parent whose own consent is still given', async () => {
+    const { learner, parent, linkId } = await consentedPair('removed.second.parent')
+    const secondEmail = email('removed.second.parent.second')
+    const second = await createParent(db, secondEmail)
+    const secondLink = await giveConsent(second, await requestConsent(learner, secondEmail))
+
+    await call(learner, 'select public.remove_link($1)', [linkId])
+
+    expect(await family(parent)).toEqual([
+      expect.objectContaining({ link_id: linkId, status: 'removed' }),
+    ])
+    expect(await family(second)).toEqual([
+      expect.objectContaining({ link_id: secondLink, status: 'active' }),
+    ])
+  })
+
   it('closes a consent request waiting on a removed link, so it cannot relink', async () => {
     const parent = await createParent(db, email('pending.removed.parent'))
     const minor = await createMinorLearner(db, email('pending.removed.learner'))
