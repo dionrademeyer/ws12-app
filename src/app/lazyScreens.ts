@@ -18,6 +18,10 @@ export const NotFoundScreen = lazy(() =>
   import('../features/not-found/NotFoundScreen').then((m) => ({ default: m.NotFoundScreen })),
 )
 
+export const LibraryScreen = lazy(() =>
+  import('../features/library/LibraryScreen').then((m) => ({ default: m.LibraryScreen })),
+)
+
 export const SignInScreen = lazy(() =>
   import('../features/auth/SignInScreen').then((m) => ({ default: m.SignInScreen })),
 )
